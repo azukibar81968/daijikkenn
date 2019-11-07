@@ -63,8 +63,7 @@ int get_size(BYTE *img, int label);//与えられたラベル番号の面積を�
 double get_sat(BYTE *img, BYTE *img_hsv, int label);//与えられたラベル番号の彩度を返す関数
 double get_val(BYTE *img, BYTE *img_hsv, int label);//与えられたラベル番号の明度を返す関数
 
-void warpPers(BYTE *img);//画像を真上から撮ったように変形する
-
+void warpPers(BYTE *img);
 
 /*連携部分*/
 void exchange_ctor(double cx, double cy, double* rx, double* ry);//画像座標系からロボット座標系に変換
@@ -81,14 +80,59 @@ void mainfunc(HDC *hDC) {
 
 	cap.set(CV_CAP_PROP_FRAME_WIDTH, 1280);
 	cap.set(CV_CAP_PROP_FRAME_HEIGHT, 960);
+	
 
 	/*終了しないようにする関数*/
 	std::string hoge;
+	cv::Mat image;
+	m_move_straight(320, -100, 300, 0, 180);
+	cv::waitKey();
+	grip();
 	do
 	{
+	
+		get_image(&image);
+		disp_image(&image, hDC);
+		
+		m_move_straight(320, 100, 300, 0, 180);
+		m_move_straight(320, 100, 330, 0, 180);
+		m_move_straight(280, 0, 330, 0, 180);
+		m_move_straight(280, 0, 300, 0, 180);
+		m_move_straight(360, 0, 300, 0, 180);
+
+		
+		m_home();
+		std::cout << "fでペンを話す" << std::endl;
+		
 		hoge = "";
 		std::cin >> hoge;
+		
 	} while (hoge != "f");
+	ungrip();
+	cv::imwrite("grid.png", image);
+	disp_image(&image,hDC);
+	ungrip();
+	m_move_straight(360, 160, 200, 0, 180);
+	cv::waitKey();
+	m_move_straight(320, 0, 200, 0, 180);
+	cv::waitKey();
+	m_move_straight(270, -150, 200, 0, 180);
+	cv::waitKey();
+	m_home();
+	cv::waitKey();
+	std::cout << "エンターで撮影" << std::endl;
+	get_image(&image);
+	cv::imwrite("zahyou.png", image);
+	std::string name("sozai"),tmp;
+	for (int i = 0; i < 5; i++){
+		tmp = name;
+		tmp += std::to_string(i);
+		tmp += ".png";
+		get_image(&image);
+		cv::imwrite(tmp, image);
+		disp_image(&image,hDC);
+		cv::waitKey();
+	}
 
 }
 /**************************************************/
@@ -422,8 +466,8 @@ void exchange_ctor(double cx, double cy, double* rx, double* ry){
 	*ry = 1.1383 * cx - 324;
 	*/
 	
-	rx=0.4044*cy + 161.89 
-	ry=0.34665*csx - 222.32;
+	*rx = 0.4044*cy + 161.89;
+	*ry=0.34665*cx - 222.32;
 
 	return;
 
