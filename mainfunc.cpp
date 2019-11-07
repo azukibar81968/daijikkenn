@@ -8,6 +8,8 @@
 ***************************************************/
 #include "stdafx.h"
 #include <string>
+#include <map>
+#include <set>
 #include "img.h"
 /**************************************************/
 
@@ -69,6 +71,11 @@ void warpPers(BYTE *img);
 void exchange_ctor(double cx, double cy, double* rx, double* ry);//画像座標系からロボット座標系に変換
 void do_zeroin();//実行すると座標の調整を行う
 void eject_block();//実行するとブロックの取り除き動作を行う
+
+
+/*お釣り計算*/
+std::map<long long int, long long int> accounting(long long int received, long long int total_price);
+
 /**************************************************/
 
 
@@ -82,58 +89,23 @@ void mainfunc(HDC *hDC) {
 	cap.set(CV_CAP_PROP_FRAME_HEIGHT, 960);
 	
 
+	std::map<long long int, long long int>mp;
+	mp = accounting(4000, 2800);
+	for (auto x : mp){
+		std::cout << x.first << " " << x.second << std::endl;
+	}
+
 	/*終了しないようにする関数*/
 	std::string hoge;
-	cv::Mat image;
-	m_move_straight(320, -100, 300, 0, 180);
-	cv::waitKey();
-	grip();
+
 	do
 	{
-	
-		get_image(&image);
-		disp_image(&image, hDC);
-		
-		m_move_straight(320, 100, 300, 0, 180);
-		m_move_straight(320, 100, 330, 0, 180);
-		m_move_straight(280, 0, 330, 0, 180);
-		m_move_straight(280, 0, 300, 0, 180);
-		m_move_straight(360, 0, 300, 0, 180);
 
-		
-		m_home();
-		std::cout << "fでペンを話す" << std::endl;
-		
 		hoge = "";
 		std::cin >> hoge;
 		
 	} while (hoge != "f");
-	ungrip();
-	cv::imwrite("grid.png", image);
-	disp_image(&image,hDC);
-	ungrip();
-	m_move_straight(360, 160, 200, 0, 180);
-	cv::waitKey();
-	m_move_straight(320, 0, 200, 0, 180);
-	cv::waitKey();
-	m_move_straight(270, -150, 200, 0, 180);
-	cv::waitKey();
-	m_home();
-	cv::waitKey();
-	std::cout << "エンターで撮影" << std::endl;
-	get_image(&image);
-	cv::imwrite("zahyou.png", image);
-	std::string name("sozai"),tmp;
-	for (int i = 0; i < 5; i++){
-		tmp = name;
-		tmp += std::to_string(i);
-		tmp += ".png";
-		get_image(&image);
-		cv::imwrite(tmp, image);
-		disp_image(&image,hDC);
-		cv::waitKey();
-	}
-
+	
 }
 /**************************************************/
 
@@ -921,4 +893,32 @@ void warpPers(BYTE *img){
 	//このとき，
 	//robotX = 0.8088*imageY + 161.89, robotY = 0.6933*imageX - 222.32,
 	//これがこの画像の変形を使った場合の座標変換になります  
+}
+
+
+/*--------------------------------------------------
+処理:	合計金額と受け取ったお金からだすべきお釣りの貨幣を計算
+返り値： 各貨幣をキーとし，中に枚数が入っている連想配列
+引数:    うけとったお金<received>, 合計金額<totalprice>
+--------------------------------------------------*/
+std::map<long long int, long long int> accounting(long long int received, long long int total_price){
+	long long int otsuri = received - total_price;
+	//存在しうる貨幣をここで指定
+	std::set<long long int>st = { 1, 5, 10, 50, 100, 500 };
+
+	std::map<long long int, long long int> result;
+	if (otsuri<0){
+		std::cout << "受け取ったお金では足りません!!!" << std::endl;
+		return result;
+	}
+	else{
+		//setのなかでおおきい貨幣から順にできるかぎりたくさん枚数を出していく
+		std::set<long long int>::reverse_iterator i = st.rbegin();
+		while (i != st.rend()){
+			result[*i] = otsuri / (*i);
+			otsuri %= (*i);
+			i++;
+		}
+		return result;
+	}
 }
