@@ -1,6 +1,4 @@
-﻿
-  
-/***************************************************/
+﻿/***************************************************/
 /* myfunc.cpp 雛形 Ver. 1.0                        */
 /* 説明: 実験時に学生が編集するソースファイル      */
 /* 作成日: 20140912  作成者: 舟洞  編集者:         */
@@ -10,8 +8,6 @@
 ***************************************************/
 #include "stdafx.h"
 #include <string>
-#include <map>
-#include <set>
 #include "img.h"
 /**************************************************/
 
@@ -66,18 +62,13 @@ void get_coin(BYTE img, int coin[6], std::string mode);//コインを判別し�
 int get_size(BYTE *img, int label);//与えられたラベル番号の面積を返す関数
 double get_sat(BYTE *img, BYTE *img_hsv, int label);//与えられたラベル番号の彩度を返す関数
 double get_val(BYTE *img, BYTE *img_hsv, int label);//与えられたラベル番号の明度を返す関数
-
+BYTE get_sep_area(BYTE* img);//境界で切り出した画像を返す関数
 void warpPers(BYTE *img);
 
 /*連携部分*/
 void exchange_ctor(double cx, double cy, double* rx, double* ry);//画像座標系からロボット座標系に変換
 void do_zeroin();//実行すると座標の調整を行う
 void eject_block();//実行するとブロックの取り除き動作を行う
-
-
-/*お釣り計算*/
-std::map<long long int, long long int> accounting(long long int received, long long int total_price);
-
 /**************************************************/
 
 
@@ -86,28 +77,11 @@ std::map<long long int, long long int> accounting(long long int received, long l
 mainfunc: メイン処理（実際の処理を記述）
 ***************************************************/
 void mainfunc(HDC *hDC) {
+	*img_src = cv::imread("resorce/tray.png", 1);
+	int coin[6];
 
-	cap.set(CV_CAP_PROP_FRAME_WIDTH, 1280);
-	cap.set(CV_CAP_PROP_FRAME_HEIGHT, 960);
-	
+	get_coin(*img_src,coin,"v");
 
-	std::map<long long int, long long int>mp;
-	mp = accounting(4000, 2800);
-	for (auto x : mp){
-		std::cout << x.first << " " << x.second << std::endl;
-	}
-
-	/*終了しないようにする関数*/
-	std::string hoge;
-
-	do
-	{
-
-		hoge = "";
-		std::cin >> hoge;
-		
-	} while (hoge != "f");
-	
 }
 /**************************************************/
 
@@ -202,8 +176,8 @@ void m_position_define(int n, double x, double y, double z, double a, double b, 
 	command += std::to_string((int)b);
 	command += ",R,A,";
 
-	if (g == 1) command += "O";
-	else if (g == 0)command += "C";
+	if (g == 0) command += "O";
+	else if (g == 1)command += "C";
 	else {
 		printf("error: 未定義のグリップ状態");
 		
@@ -238,8 +212,8 @@ void m_ms(int n){
 int is_grip(){//ハンドの状態を返す関数
 	double dpos[5];
 	char cpos[3];
-
-	if (cpos[2] == (const char)"O") return 0;
+	get_position(dpos, cpos);
+	if (cpos[POS_OC] == 'O') return 0;
 	else return 1;
 }
 
@@ -440,8 +414,8 @@ void exchange_ctor(double cx, double cy, double* rx, double* ry){
 	*ry = 1.1383 * cx - 324;
 	*/
 	
-	*rx = 0.4044*cy + 161.89;
-	*ry=0.34665*cx - 222.32;
+	*rx = 0.4792*cy + 124.66;
+	*ry=0.3989*cx - 257.16;
 
 	return;
 
@@ -666,29 +640,47 @@ void to_color(BYTE *img,BYTE* img_result, int thd_B, int thd_G, int thd_R){
 引数:   画像データ<img_raw>,格納用配列 <coin_list> ,動作モード<mode> "v"->コインパラメータ出力
 --------------------------------------------------*/
 void get_coin(BYTE img,int coin[6],std::string mode ){
-	/*定義*/
-	cv::Mat img_gray;//グレー化画像
-	to_gray(&img, &img_gray);//グレー化
 
+	/*宣言*/
 	cv::Mat img_labelled;//ラベル済み画像
-
-	cv::Mat img_hsv;//hsv変換画像
+	cv::Mat img_cvt;
+	cv::Mat img_hsv;
 	cv::cvtColor(img, img_hsv, CV_BGR2HSV);
 
 	BOOL hole_flg = FALSE;
 	BOOL sat_flg = FALSE;
 	BOOL big_flg = FALSE;
 	BOOL sml_flg = FALSE;
+
 	/*画像下処理*/
-	binarize(&img_gray, LABEL_THD);//二値化
-	erosion(&img_gray, 1);//ノイズ除去
-	dilation(&img_gray, 2);//ノイズ除去
-	erosion(&img_gray, 1);//ノイズ除去
-	int c_num = labeling(&img_gray, &img_labelled);//ラベリング
+	//---------------グレー化-------------------------------
+	cv::cvtColor(img, img_cvt, CV_BGR2HSV);
+	for (int rows = 0; rows < img_cvt.rows; rows++){
+		for (int cols = 0; cols < img_cvt.cols; cols++){
+			rgb((&img_cvt), rows, cols, 0) = rgb((&img_cvt), rows, cols, 1);
+			rgb((&img_cvt), rows, cols, 2) = rgb((&img_cvt), rows, cols, 1);
+		}
+	}
+	img_cvt = ~img_cvt;
+
+	disp_image((&img_cvt), "");
+	wait_while_kbhit();
+
+
+
+	binarize((&img_cvt), 180);//二値化
+	erosion((&img_cvt), 1);//ノイズ除去
+	dilation((&img_cvt), 2);//ノイズ除去
+	erosion((&img_cvt), 1);//ノイズ除去
+	to_gray(&img_cvt);
+	int c_num = labeling(&img_cvt, &img_labelled);//ラベリング
 
 	/*確認用，もう使わないかな*/
-	//disp_labeled_image(&img_labelled, "");
-	//wait_while_kbhit();
+	disp_image((&img_cvt), "");
+	wait_while_kbhit();
+
+	disp_labeled_image(&img_labelled, "");
+	wait_while_kbhit();
 
 
 
@@ -844,6 +836,7 @@ double get_val(BYTE *img, BYTE *img_hsv, int label){
 
 }
 
+
 /*--------------------------------------------------
 処理:	画像を真上から撮ったように変形する
 返り値：なし
@@ -854,8 +847,8 @@ void warpPers(BYTE *img){
 	//1280 960
 	// 変換前の画像での座標
 	const cv::Point2f src_pt[] = {
-		cv::Point2f(130, 0),
-		cv::Point2f(1190, 0),
+		cv::Point2f(115, 0),
+		cv::Point2f(1170, 0),
 		cv::Point2f(0, 960),
 		cv::Point2f(1280, 960) };
 
@@ -874,6 +867,7 @@ void warpPers(BYTE *img){
 		cv::Point2f(595, 0),
 		cv::Point2f(0, 480),
 		cv::Point2f(640, 480) };
+
 	// 変換後の画像での座標
 	const cv::Point2f dst_pt[] = {
 		cv::Point2f(0, 0),
@@ -898,28 +892,36 @@ void warpPers(BYTE *img){
 
 
 /*--------------------------------------------------
-処理:	合計金額と受け取ったお金からだすべきお釣りの貨幣を計算
-返り値： 各貨幣をキーとし，中に枚数が入っている連想配列
-引数:    うけとったお金<received>, 合計金額<totalprice>
+処理:	
+返り値：なし
+引数:   変形したい画像のポインタ(上書き)
 --------------------------------------------------*/
-std::map<long long int, long long int> accounting(long long int received, long long int total_price){
-	long long int otsuri = received - total_price;
-	//存在しうる貨幣をここで指定
-	std::set<long long int>st = { 1, 5, 10, 50, 100, 500 };
-
-	std::map<long long int, long long int> result;
-	if (otsuri<0){
-		std::cout << "受け取ったお金では足りません!!!" << std::endl;
-		return result;
-	}
-	else{
-		//setのなかでおおきい貨幣から順にできるかぎりたくさん枚数を出していく
-		std::set<long long int>::reverse_iterator i = st.rbegin();
-		while (i != st.rend()){
-			result[*i] = otsuri / (*i);
-			otsuri %= (*i);
-			i++;
+BYTE get_sep_area(BYTE* img){
+	//---------------グレー化-------------------------------
+	cv::cvtColor(*img, *img, CV_BGR2HSV);
+	for (int rows = 0; rows < img->rows; rows++){
+		for (int cols = 0; cols < img->cols; cols++){
+			rgb(img, rows, cols, 0) = rgb(img, rows, cols, 1);
+			rgb(img, rows, cols, 2) = rgb(img, rows, cols, 1);
 		}
-		return result;
 	}
+
+	//---------------GoussianBlurによる平滑化---------------
+	cv::Mat img_gauss;
+	cv::GaussianBlur(*img, img_gauss, cv::Size(5, 5), 0, 0);
+	disp_gray_image(&img_gauss, "");
+	wait_while_kbhit();
+
+	//---------------Canny変換------------------------------
+	cv::Mat img_canny;
+	cv::Canny(img_gauss, img_canny, 100, 200);
+	disp_gray_image(&img_canny, "");
+	wait_while_kbhit();
+
+	return img_canny;
+
+	//--------------Hough変換-------------------------------
+	cv::Mat img_hough;
+	cv::HoughLines(img_canny, img_hough, 1, CV_PI / 256, 20);
+	//tyuu dann tyuu
 }
