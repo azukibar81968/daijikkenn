@@ -45,7 +45,9 @@ void m_home();//ホームポジションに移動する関数
 void m_grip();//ハンドを閉じる関数
 void m_ungrip();//ハンドを開く関数
 void m_move_position(double x, double y, double z, double a, double b);//指定した姿勢に移動する関数
+void m_move_position2(double x, double y, double z, double a, double b);//指定した姿勢に移動する関数
 void m_position_define(int n, double x, double y, double z, double a, double b, int g);//指定した姿勢をポジションリストに登録する関数
+void m_position_define2(int n, double x, double y, double z, double a, double b, int g);//指定した姿勢をポジションリストに登録する関数
 void m_ms(int n);//指定したポジション番号へ直線移動
 int is_grip();//ハンドの状態を返す関数
 void m_move_straight(double x, double y, double z, double a, double b);//指定した座標に直線移動する関数
@@ -64,6 +66,8 @@ double get_sat(BYTE *img, BYTE *img_hsv, int label);//与えられたラベル�
 double get_val(BYTE *img, BYTE *img_hsv, int label);//与えられたラベル番号の明度を返す関数
 BYTE get_sep_area(BYTE* img);//境界で切り出した画像を返す関数
 void warpPers(BYTE *img);
+void get_side_of_tray(cv::Mat image, double *x, double *y, std::string mode);
+
 
 /*連携部分*/
 void exchange_ctor(double cx, double cy, double* rx, double* ry);//画像座標系からロボット座標系に変換
@@ -157,9 +161,24 @@ void m_move_position(double x, double y, double z, double a, double b){
 }
 
 /*--------------------------------------------------
+処理:	指定した姿勢と位置に移動する関数(コマンドが小数点2つくらいまでだすだけで機能に変わりはないです)
+戻り値: void
+引数:   位置<x>,<y>,<z>, 姿勢 <a>,<b> 
+--------------------------------------------------*/
+void m_move_position2(double x, double y, double z, double a, double b){
+	std::cout << "(" << x << "," << y << "," << z << "," << a << "," << b << ")に移動します" << endl;
+	char buf[BUF_SIZE];
+
+	sprintf_s(buf, BUF_SIZE, "MP %+5.2lf,%+5.2lf,%+5.2lf,%+5.2lf,%+5.2lf", x, y, z, a, b);
+	cout << buf << endl;
+	rsputs(buf);
+	wait_done();
+
+}
+/*--------------------------------------------------
 処理:	指定した姿勢をポジションリストに登録する関数
 戻り値: void
-引数:   ポジションリスト登録先 <n> 位置<x>,<y>,<z>, 姿勢 <a>,<b> グリップ<g>（g =1:open  g=0:close）
+引数:   ポジションリスト登録先 <n> 位置<x>,<y>,<z>, 姿勢 <a>,<b> グリップ<g>（g =1:close  g=0:open）
 --------------------------------------------------*/
 void m_position_define(int n, double x, double y, double z, double a, double b, int g){
 	std::string command("PD ");
@@ -190,13 +209,37 @@ void m_position_define(int n, double x, double y, double z, double a, double b, 
 	return;
 }
 
+
+/*--------------------------------------------------
+処理:	指定した姿勢をポジションリストに登録する関数(コマンドが小数点2つくらいまでだすだけで機能に変わりはないです)
+戻り値: void
+引数:   ポジションリスト登録先 <n> 位置<x>,<y>,<z>, 姿勢 <a>,<b> グリップ<g>（g =1:close  g=0:open）
+--------------------------------------------------*/
+void m_position_define2(int n, double x, double y, double z, double a, double b, int g){
+	std::cout << "番号" << n << "=(" << x << "," << y << "," << z << "," << a << "," << b << " " << g << ")を登録します" << endl;
+
+	char buf[BUF_SIZE];
+	char grip;
+	if (g == 1){
+		grip = 'C';
+	}
+	else{
+		grip = 'O';
+	}
+	sprintf_s(buf, BUF_SIZE, "PD %d,%+5.2lf,%+5.2lf,%+5.2lf,%+5.2lf,%+5.2lf,R,A,%c", n, x, y, z, a, b, grip);
+	cout << buf << endl;
+	rsputs(buf);
+	wait_done();
+}
+
+
 /*--------------------------------------------------
 処理:	指定したポジション番号へ直線移動
 戻り値: void
 引数:   ポジションリスト参照先 <n>
 --------------------------------------------------*/
 void m_ms(int n){
-	std::string command("MO ");
+	std::string command("MS ");
 	command += std::to_string(n);
 
 	printf((char*)command.c_str());
@@ -285,8 +328,8 @@ void get_cog(BYTE *img, int label, double *gx, double *gy){
 	if (size_count == 0){
 		printf("対応するラベル付けがされていません label = %d", label);
 	}
-	*gx = x_sum / size_count;
-	*gy = y_sum / size_count;
+	*gx = (double)x_sum / (double)size_count;
+	*gy = (double)y_sum / (double)size_count;
 
 	return;
 }
@@ -360,6 +403,29 @@ void get_direction(BYTE *img, int label, double gx, double gy, double *theta){
 	*theta = atan2(e_y, e_x);
 }
 
+
+
+/*--------------------------------------------------
+処理: 	ロボットの動作速度を変更する関数
+返り値：void
+引数:   指定したい値n(0<=n<=22出ない値を入力する場合clampされます，22<n<=30にしたいときは関数仕様を変更すること)
+重心格納用変数＜theta＞
+--------------------------------------------------*/
+void speed_change(int n){
+	char buf[BUF_SIZE];
+
+	if (0 <= n&&n <= 22){
+
+
+		sprintf_s(buf, BUF_SIZE, "SP %d", n);
+		cout << buf << endl;
+		rsputs(buf);
+		wait_done();
+	}
+	else{
+		std::cout << "指定されたスピードは範囲外です" << std::endl;
+	}
+}
 
 /*--------------------------------------------------
 処理:	得られた画像からブロックの座標と傾きの一覧を取得する関数
@@ -892,7 +958,7 @@ void warpPers(BYTE *img){
 
 
 /*--------------------------------------------------
-処理:	
+処理:	画像の変形(ロボット用)
 返り値：なし
 引数:   変形したい画像のポインタ(上書き)
 --------------------------------------------------*/
@@ -924,4 +990,14 @@ BYTE get_sep_area(BYTE* img){
 	cv::Mat img_hough;
 	cv::HoughLines(img_canny, img_hough, 1, CV_PI / 256, 20);
 	//tyuu dann tyuu
+}
+
+
+/*--------------------------------------------------
+処理:トレーの横の座標を取得()
+返り値：なし
+引数:  座標格納用変数x,y,動作モード指定関数mode(試験用は"image")
+--------------------------------------------------*/
+void get_side_of_tray(cv::Mat image,double *x, double *y, std::string mode){
+
 }
