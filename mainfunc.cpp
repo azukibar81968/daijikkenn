@@ -8,6 +8,7 @@
 ***************************************************/
 #include "stdafx.h"
 #include <string>
+#include <algorithm>
 #include "img.h"
 /**************************************************/
 
@@ -45,18 +46,19 @@ void m_home();//ホームポジションに移動する関数
 void m_grip();//ハンドを閉じる関数
 void m_ungrip();//ハンドを開く関数
 void m_move_position(double x, double y, double z, double a, double b);//指定した姿勢に移動する関数
-void m_move_position2(double x, double y, double z, double a, double b);//指定した姿勢に移動する関数
+void m_move_position_2(double x, double y, double z, double a, double b);//指定した姿勢に移動する関数
 void m_position_define(int n, double x, double y, double z, double a, double b, int g);//指定した姿勢をポジションリストに登録する関数
-void m_position_define2(int n, double x, double y, double z, double a, double b, int g);//指定した姿勢をポジションリストに登録する関数
+void m_position_define_2(int n, double x, double y, double z, double a, double b, int g);//指定した姿勢をポジションリストに登録する関数
 void m_ms(int n);//指定したポジション番号へ直線移動
 int is_grip();//ハンドの状態を返す関数
 void m_move_straight(double x, double y, double z, double a, double b);//指定した座標に直線移動する関数
 void m_move_circle2(double cx, double cy, double z, double r);//中心(cx,cy,z) 半径r の円を描くように移動する
-
+void shake();//姿勢a,bをガチャガチャ変える
 /*画像処理部分*/
 void get_cog(BYTE *img, int label, double *gx, double *dy);//重心を取得する関数
 void get_size(BYTE *img, int label, double *size_x, double *size_y);//サイズを取得する関数
 void get_direction(BYTE *img, int label, double gx, double gy, double* theta);//方向を取得する関数
+
 int get_block_list(BYTE *img, int thd, double param[][3], char* mode);//imgからブロックのデータを取得する関数
 
 void to_color(BYTE *img, BYTE* img_result, int thd_B, int thd_G, int thd_R);//画像を色でラベリングする関数
@@ -66,13 +68,17 @@ double get_sat(BYTE *img, BYTE *img_hsv, int label);//与えられたラベル�
 double get_val(BYTE *img, BYTE *img_hsv, int label);//与えられたラベル番号の明度を返す関数
 BYTE get_sep_area(BYTE* img);//境界で切り出した画像を返す関数
 void warpPers(BYTE *img);
-void get_side_of_tray(cv::Mat image, double *x, double *y, std::string mode);
 
-
+void get_side_of_tray(cv::Mat image, int label, double *x, double *y);
+double get_direction_2(BYTE *img, int label, double* theta);//方向を取得する関数,傾きをついでにreturn
+double rad2deg(double rad);//弧度法を入力すると弧度法で返す
+void tray_where_to_grip(cv::Mat *image, int label, double *x, double *y);//トレイで掴みやすそうなとこを探す
+void get_image_2(cv::Mat *image);//透視変換済みの画像を撮影
 /*連携部分*/
 void exchange_ctor(double cx, double cy, double* rx, double* ry);//画像座標系からロボット座標系に変換
 void do_zeroin();//実行すると座標の調整を行う
 void eject_block();//実行するとブロックの取り除き動作を行う
+void grip_and_shake_tray();//トレイを掴み，ゆらして置く
 /**************************************************/
 
 
@@ -81,12 +87,27 @@ void eject_block();//実行するとブロックの取り除き動作を行う
 mainfunc: メイン処理（実際の処理を記述）
 ***************************************************/
 void mainfunc(HDC *hDC) {
-	*img_src = cv::imread("resorce/tray.png", 1);
-	int coin[6];
+//cv::Mat img = cv::imread("sozai/sozai6.png", 0);
 
-	get_coin(*img_src,coin,"v");
+	cap.set(CV_CAP_PROP_FRAME_WIDTH, 1280);
+	cap.set(CV_CAP_PROP_FRAME_HEIGHT, 9600);
+	//get_image_2(&img);
+	//cv::Mat img;
+	//warpPers(&img);
+	
+	//get_image_2(&img);
+	//to_gray(&img);
 
-}
+	
+	
+	//
+	
+	double x, y,th;
+	grip_and_shake_tray();
+	
+	cv::waitKey();
+	
+	}
 /**************************************************/
 
 
@@ -157,6 +178,7 @@ void m_move_position(double x, double y, double z, double a, double b){
 	printf((char*)command.c_str());
 	printf("\n");
 	rsputs((char*)command.c_str());
+	wait_done();
 	return;
 }
 
@@ -165,7 +187,7 @@ void m_move_position(double x, double y, double z, double a, double b){
 戻り値: void
 引数:   位置<x>,<y>,<z>, 姿勢 <a>,<b> 
 --------------------------------------------------*/
-void m_move_position2(double x, double y, double z, double a, double b){
+void m_move_position_2(double x, double y, double z, double a, double b){
 	std::cout << "(" << x << "," << y << "," << z << "," << a << "," << b << ")に移動します" << endl;
 	char buf[BUF_SIZE];
 
@@ -215,7 +237,7 @@ void m_position_define(int n, double x, double y, double z, double a, double b, 
 戻り値: void
 引数:   ポジションリスト登録先 <n> 位置<x>,<y>,<z>, 姿勢 <a>,<b> グリップ<g>（g =1:close  g=0:open）
 --------------------------------------------------*/
-void m_position_define2(int n, double x, double y, double z, double a, double b, int g){
+void m_position_define_2(int n, double x, double y, double z, double a, double b, int g){
 	std::cout << "番号" << n << "=(" << x << "," << y << "," << z << "," << a << "," << b << " " << g << ")を登録します" << endl;
 
 	char buf[BUF_SIZE];
@@ -310,8 +332,8 @@ void m_move_circle2(double cx, double cy, double z, double r){
 引数:   ラベリングされた画像＜*img＞，ラベル番号<label>，重心格納用変数＜(double) *gx＞＜(double)*gy＞
 --------------------------------------------------*/
 void get_cog(BYTE *img, int label, double *gx, double *gy){
-	int x_sum = 0;
-	int y_sum = 0;
+	long long int x_sum = 0;
+	long long int y_sum = 0;
 	int size_count = 0;
 
 	for (int x_axis = 0; x_axis < img->cols; x_axis++){
@@ -482,7 +504,7 @@ void exchange_ctor(double cx, double cy, double* rx, double* ry){
 	
 	*rx = 0.4792*cy + 124.66;
 	*ry=0.3989*cx - 257.16;
-
+	
 	return;
 
 		}
@@ -926,21 +948,6 @@ void warpPers(BYTE *img){
 		cv::Point2f(1280, 960)
 	};
 	
-	/*640 480
-	// 変換前の画像での座標
-	const cv::Point2f src_pt[] = {
-		cv::Point2f(65, 0),
-		cv::Point2f(595, 0),
-		cv::Point2f(0, 480),
-		cv::Point2f(640, 480) };
-
-	// 変換後の画像での座標
-	const cv::Point2f dst_pt[] = {
-		cv::Point2f(0, 0),
-		cv::Point2f(640, 0),
-		cv::Point2f(0, 480),
-		cv::Point2f(640, 480)
-	};*/
 
 	//変換行列の計算
 	const cv::Mat homography_matrix = cv::getPerspectiveTransform(src_pt, dst_pt);
@@ -951,9 +958,6 @@ void warpPers(BYTE *img){
 
 	cv::warpPerspective(*img, *img, homography_matrix, img->size());
 
-	//このとき，
-	//robotX = 0.8088*imageY + 161.89, robotY = 0.6933*imageX - 222.32,
-	//これがこの画像の変形を使った場合の座標変換になります  
 }
 
 
@@ -994,10 +998,187 @@ BYTE get_sep_area(BYTE* img){
 
 
 /*--------------------------------------------------
-処理:トレーの横の座標を取得()
+処理:トレイ(とか)の横の座標を取得()
 返り値：なし
-引数:  座標格納用変数x,y,動作モード指定関数mode(試験用は"image")
+引数:  画像image，トレイのラベル番号label,座標格納用変数x,y)
 --------------------------------------------------*/
-void get_side_of_tray(cv::Mat image,double *x, double *y, std::string mode){
+void get_side_of_tray(cv::Mat image,int label,double *x, double *y){
+	double gx, gy, th,inclition;
+	get_cog(&image, label, &gx, &gy);
+	inclition=get_direction_2(&image, label,  &th);
+	std::cout<<rad2deg(th)<<" " << inclition << std::endl;
 
+
+
+}
+
+/*--------------------------------------------------
+処理:の横の座標を取得()
+返り値：なし
+引数:  ラベリング済み画像image,トレイのラベル番号label
+--------------------------------------------------*/
+void grip_and_shake_tray(){
+	double gx,gy, th, deg;
+	int tray_label=-1;
+	cv::Mat image;
+
+	//	get_image_2(&image);
+
+	image = cv::imread("sozai/sozai1.png");
+	to_gray(&image);
+	cv::threshold(image, image, 0, 255, CV_THRESH_BINARY | CV_THRESH_OTSU);
+	/*
+	erosion(&image, 3);
+	dilation(&image, 3);
+	*/
+	cv::Mat lab;
+	int label_num=labeling(&image, &lab);
+	for (int i = 1; i <= label_num; i++){
+		if (169000 < get_size(&lab, i) && get_size(&lab, i) < 174000){
+			tray_label = i;
+			break;
+		}
+	}
+	if (tray_label == -1){
+		std::cout << "トレイ検出失敗" << std::endl;
+		return;
+	}
+	else{
+		get_cog(&lab, tray_label, &gx, &gy);
+		get_direction_2(&lab, tray_label, &th);
+		deg = rad2deg(th);
+		cv::waitKey();
+		std::cout << get_size(&lab, 1) << std::endl;
+		if (1/*(-10 <= deg&&deg <= 10) || (deg <= -75 || 75 <= deg)*/){
+			ungrip();
+			std::cout << tray_label << "番をつかみます" << std::endl;
+			double grip_cx, grip_cy, grip_rx, grip_ry;
+			tray_where_to_grip(&image, tray_label, &grip_cx, &grip_cy);
+			cv::circle(*img_src, cv::Point(grip_cx, grip_cy), 30, cv::Scalar(200, 0, 0), -1, CV_AA);
+			exchange_ctor(grip_cx, grip_cy, &grip_rx, &grip_ry);
+			std::cout << grip_cx << " " << grip_cy << " " << grip_rx << " " << grip_ry << std::endl;
+			
+			exchange_ctor(grip_cx, grip_cy, &grip_rx, &grip_ry);
+			std::cout << "ここへGO " << grip_rx << " " << grip_ry << std::endl;
+			/*
+			cv::waitKey();
+			m_move_position_2(grip_rx - 10, grip_ry, 210, 0, 180);
+			m_move_position_2(grip_rx - 10, grip_ry, 210, 0, 160);
+			m_move_position_2(grip_rx - 10, grip_ry, 200, 0, 140);
+			m_move_position_2(grip_rx, grip_ry, 190, 0, 120);
+			grip();
+			wait_done();
+			m_move_position_2(180, 0, 600, 0, 90);
+			shake();
+			*/
+		}
+		else{
+			std::cout << "向きがやばいので回転させます" << std::endl;
+			double side_x, side_y;
+			get_side_of_tray(image, tray_label, &side_x, &side_y);
+
+		}
+	}
+
+}
+
+void tray_where_to_grip(cv::Mat *image, int label, double *x, double *y){
+	int sum;
+	double x_min, x_max;
+	double gx,gy;
+	get_cog(image, label, &gx, &gy);
+	for (int i = 0; i < image->rows; i++){
+		sum = 0;
+		x_min = image->cols;
+		x_max = 0;
+		for (int j = 0; j < image->cols; j++){
+			if ((int)gray(image, i, j) == label){
+				x_min = std::min((double)j, x_min);
+				x_max = std::max((double)j, x_max);
+
+				sum++;
+			}
+		}
+		if (sum >= 400){
+			*x = (x_min + x_max) / 2;
+			*y = i;
+			return;
+		}
+	}
+}
+
+void shake(){
+	double dpos[5];
+	char cpos[3];
+	get_position(dpos, cpos);
+	speed_change(20);
+	m_move_position_2(dpos[0], dpos[1], dpos[2], dpos[3]-10, dpos[4]-30);
+	m_move_position_2(dpos[0], dpos[1], dpos[2], dpos[3] + 10, dpos[4] + 30);
+
+	m_move_position_2(dpos[0], dpos[1], dpos[2], dpos[3]-10, dpos[4] + 30);
+
+	m_move_position_2(dpos[0], dpos[1], dpos[2], dpos[3]+10, dpos[4] - 30);
+
+	m_move_position_2(dpos[0], dpos[1], dpos[2], dpos[3] - 10, dpos[4] - 30);
+	m_move_position_2(dpos[0], dpos[1], dpos[2], dpos[3] + 10, dpos[4] + 30);
+
+	m_move_position_2(dpos[0], dpos[1], dpos[2], dpos[3] - 10, dpos[4] + 30);
+
+	m_move_position_2(dpos[0], dpos[1], dpos[2], dpos[3] + 10, dpos[4] - 30);
+	speed_change(15);
+	m_move_position_2(dpos[0], dpos[1], dpos[2], dpos[3] , dpos[4]);
+
+}
+
+/*--------------------------------------------------
+処理:	ラベリングされた図形の方向を求める関数
+返り値：傾きdouble
+引数:   ラベリングされた画像＜*img＞，ラベル番号<label>，重心（get_cog()で取得）＜*gx＞＜*gy＞,
+重心格納用変数＜theta＞
+--------------------------------------------------*/
+double get_direction_2(BYTE *img, int label, double *theta){
+	double gx, gy;
+	get_cog(img, label, &gx, &gy);
+
+	double s11 = 0, s12 = 0, s22 = 0;
+	for (int i = 0; i < img->rows; i++){
+		for (int j = 0; j < img->cols; j++){
+			if ((int)gray(img, i, j) == label){
+				s11 += (j - gx)*(j - gx);
+				s12 += (j - gx)*(i - gy);
+				s22 += (i - gy)*(i - gy);
+			}
+		}
+	}
+	double lambda = (s11 + s22 + sqrt(s11*s11 + s22*s22 - 2 * s11*s22 + 4 * s12*s12)) / 2;
+	double result = std::atan2(lambda - s11, s12);
+	if (rad2deg(result) > 90){
+		result -= M_PI;
+	}
+	*theta = result;
+	//std::cout << (lambda - s11) << " " << (s12) << " " << (lambda - s11 )/( s12)<< std::endl;
+	return (lambda - s11) / (s12);
+}
+
+
+
+/*--------------------------------------------------
+処理:	弧度法から度数法を
+返り値：度数法のけっか
+引数:   弧度法のrad
+--------------------------------------------------*/
+double rad2deg(double rad){
+
+	return rad * 180 / (M_PI);
+}
+
+
+/*--------------------------------------------------
+処理:	画像を撮影ｍ透視変換(warpPers())済みのものを返す
+返り値:なし
+引数:   画像格納用変数<image>
+--------------------------------------------------*/
+void get_image_2(cv::Mat *image){
+	get_image(image);
+	warpPers(image);
 }
