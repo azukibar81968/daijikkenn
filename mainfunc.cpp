@@ -8,7 +8,10 @@
 ***************************************************/
 #include "stdafx.h"
 #include <string>
+#include <algorithm>
+#include <map>
 #include "img.h"
+#include <Windows.h>
 /**************************************************/
 
 /***************************************************
@@ -45,16 +48,21 @@ void m_home();//ホームポジションに移動する関数
 void m_grip();//ハンドを閉じる関数
 void m_ungrip();//ハンドを開く関数
 void m_move_position(double x, double y, double z, double a, double b);//指定した姿勢に移動する関数
+void m_move_position_2(double x, double y, double z, double a, double b);//指定した姿勢に移動する関数
 void m_position_define(int n, double x, double y, double z, double a, double b, int g);//指定した姿勢をポジションリストに登録する関数
+void m_position_define_2(int n, double x, double y, double z, double a, double b, int g);//指定した姿勢をポジションリストに登録する関数
 void m_ms(int n);//指定したポジション番号へ直線移動
 int is_grip();//ハンドの状態を返す関数
 void m_move_straight(double x, double y, double z, double a, double b);//指定した座標に直線移動する関数
 void m_move_circle2(double cx, double cy, double z, double r);//中心(cx,cy,z) 半径r の円を描くように移動する
+void shake();//姿勢a,bをガチャガチャ変える
 
+void check_where_coin();
 /*画像処理部分*/
 void get_cog(BYTE *img, int label, double *gx, double *dy);//重心を取得する関数
 void get_size(BYTE *img, int label, double *size_x, double *size_y);//サイズを取得する関数
 void get_direction(BYTE *img, int label, double gx, double gy, double* theta);//方向を取得する関数
+
 int get_block_list(BYTE *img, int thd, double param[][3], char* mode);//imgからブロックのデータを取得する関数
 
 void to_color(BYTE *img, BYTE* img_result, int thd_B, int thd_G, int thd_R);//画像を色でラベリングする関数
@@ -65,23 +73,49 @@ double get_val(BYTE *img, BYTE *img_hsv, int label);//与えられたラベル�
 BYTE get_sep_area(BYTE* img);//境界で切り出した画像を返す関数
 void warpPers(BYTE *img);
 
+void get_side_of_tray(cv::Mat image, int label, double *x, double *y);
+double get_direction_2(BYTE *img, int label, double* theta);//方向を取得する関数,傾きをついでにreturn
+double rad2deg(double rad);//弧度法を入力すると弧度法で返す
+void tray_where_to_grip(cv::Mat *image, int label, double *x, double *y);//トレイで掴みやすそうなとこを探す
+void get_image_2(cv::Mat *image);//透視変換済みの画像を撮影
+void rot_90(cv::Mat &img);
+int find_marker_and_get_price_prototype();//ARマーカ風のオブジェクトで値段計算
+int find_marker_and_get_price();//ARマーカ風のオブジェクトで値段計算
+double average_of_Mat(cv::Mat *img);
+int ar_read(cv::Mat *img);
+bool is_marker(vector<vector<double>> grid);
+int ar_to_price(vector<vector<double>> grid_double);
 /*連携部分*/
 void exchange_ctor(double cx, double cy, double* rx, double* ry);//画像座標系からロボット座標系に変換
 void do_zeroin();//実行すると座標の調整を行う
 void eject_block();//実行するとブロックの取り除き動作を行う
+void grip_and_shake_tray();//トレイを掴み，ゆらして置く
+void grip_tray_and_getcoin();//受け取ったお金を回収
+void return_change(map<long long int, long long int> coin);
 /**************************************************/
-
+std::map<long long int, long long int> accounting(long long int received, long long int total_price);
 
 
 /***************************************************
 mainfunc: メイン処理（実際の処理を記述）
 ***************************************************/
 void mainfunc(HDC *hDC) {
-	*img_src = cv::imread("resorce/tray.png", 1);
-	int coin[6];
 
-	get_coin(*img_src,coin,"v");
 
+	/*
+	cv::Mat img=	cv::imread("sozai.png",0);
+	
+	cv::threshold(img, img, 0, 255, CV_THRESH_BINARY | CV_THRESH_OTSU);
+	
+	disp_image(&img, "");
+	cv::waitKey();
+	cap.set(CV_CAP_PROP_FRAME_WIDTH, 1280);
+	cap.set(CV_CAP_PROP_FRAME_HEIGHT, 960);
+	
+	cv::waitKey();
+	*/
+	std::cout << find_marker_and_get_price() << std::endl;
+	//grip_and_shake_tray();
 }
 /**************************************************/
 
@@ -153,13 +187,29 @@ void m_move_position(double x, double y, double z, double a, double b){
 	printf((char*)command.c_str());
 	printf("\n");
 	rsputs((char*)command.c_str());
+	wait_done();
 	return;
 }
 
 /*--------------------------------------------------
+処理:	指定した姿勢と位置に移動する関数(コマンドが小数点2つくらいまでだすだけで機能に変わりはないです)
+戻り値: void
+引数:   位置<x>,<y>,<z>, 姿勢 <a>,<b> 
+--------------------------------------------------*/
+void m_move_position_2(double x, double y, double z, double a, double b){
+	std::cout << "(" << x << "," << y << "," << z << "," << a << "," << b << ")に移動します" << endl;
+	char buf[BUF_SIZE];
+
+	sprintf_s(buf, BUF_SIZE, "MP %+5.2lf,%+5.2lf,%+5.2lf,%+5.2lf,%+5.2lf", x, y, z, a, b);
+	cout << buf << endl;
+	rsputs(buf);
+	wait_done();
+
+}
+/*--------------------------------------------------
 処理:	指定した姿勢をポジションリストに登録する関数
 戻り値: void
-引数:   ポジションリスト登録先 <n> 位置<x>,<y>,<z>, 姿勢 <a>,<b> グリップ<g>（g =1:open  g=0:close）
+引数:   ポジションリスト登録先 <n> 位置<x>,<y>,<z>, 姿勢 <a>,<b> グリップ<g>（g =1:close  g=0:open）
 --------------------------------------------------*/
 void m_position_define(int n, double x, double y, double z, double a, double b, int g){
 	std::string command("PD ");
@@ -190,13 +240,37 @@ void m_position_define(int n, double x, double y, double z, double a, double b, 
 	return;
 }
 
+
+/*--------------------------------------------------
+処理:	指定した姿勢をポジションリストに登録する関数(コマンドが小数点2つくらいまでだすだけで機能に変わりはないです)
+戻り値: void
+引数:   ポジションリスト登録先 <n> 位置<x>,<y>,<z>, 姿勢 <a>,<b> グリップ<g>（g =1:close  g=0:open）
+--------------------------------------------------*/
+void m_position_define_2(int n, double x, double y, double z, double a, double b, int g){
+	std::cout << "番号" << n << "=(" << x << "," << y << "," << z << "," << a << "," << b << " " << g << ")を登録します" << endl;
+
+	char buf[BUF_SIZE];
+	char grip;
+	if (g == 1){
+		grip = 'C';
+	}
+	else{
+		grip = 'O';
+	}
+	sprintf_s(buf, BUF_SIZE, "PD %d,%+5.2lf,%+5.2lf,%+5.2lf,%+5.2lf,%+5.2lf,R,A,%c", n, x, y, z, a, b, grip);
+	cout << buf << endl;
+	rsputs(buf);
+	wait_done();
+}
+
+
 /*--------------------------------------------------
 処理:	指定したポジション番号へ直線移動
 戻り値: void
 引数:   ポジションリスト参照先 <n>
 --------------------------------------------------*/
 void m_ms(int n){
-	std::string command("MO ");
+	std::string command("MS ");
 	command += std::to_string(n);
 
 	printf((char*)command.c_str());
@@ -225,7 +299,7 @@ int is_grip(){//ハンドの状態を返す関数
 void m_move_straight(double x, double y, double z, double a, double b){
 	int grp_flag = is_grip();
 
-	m_position_define(1, x, y, z, a, b, grp_flag);
+	m_position_define_2(1, x, y, z, a, b, grp_flag);
 	m_ms(1);
 
 }
@@ -267,8 +341,8 @@ void m_move_circle2(double cx, double cy, double z, double r){
 引数:   ラベリングされた画像＜*img＞，ラベル番号<label>，重心格納用変数＜(double) *gx＞＜(double)*gy＞
 --------------------------------------------------*/
 void get_cog(BYTE *img, int label, double *gx, double *gy){
-	int x_sum = 0;
-	int y_sum = 0;
+	long long int x_sum = 0;
+	long long int y_sum = 0;
 	int size_count = 0;
 
 	for (int x_axis = 0; x_axis < img->cols; x_axis++){
@@ -285,8 +359,8 @@ void get_cog(BYTE *img, int label, double *gx, double *gy){
 	if (size_count == 0){
 		printf("対応するラベル付けがされていません label = %d", label);
 	}
-	*gx = x_sum / size_count;
-	*gy = y_sum / size_count;
+	*gx = (double)x_sum / (double)size_count;
+	*gy = (double)y_sum / (double)size_count;
 
 	return;
 }
@@ -361,6 +435,29 @@ void get_direction(BYTE *img, int label, double gx, double gy, double *theta){
 }
 
 
+
+/*--------------------------------------------------
+処理: 	ロボットの動作速度を変更する関数
+返り値：void
+引数:   指定したい値n(0<=n<=22出ない値を入力する場合clampされます，22<n<=30にしたいときは関数仕様を変更すること)
+重心格納用変数＜theta＞
+--------------------------------------------------*/
+void speed_change(int n){
+	char buf[BUF_SIZE];
+
+	if (0 <= n&&n <= 22){
+
+
+		sprintf_s(buf, BUF_SIZE, "SP %d", n);
+		cout << buf << endl;
+		rsputs(buf);
+		wait_done();
+	}
+	else{
+		std::cout << "指定されたスピードは範囲外です" << std::endl;
+	}
+}
+
 /*--------------------------------------------------
 処理:	得られた画像からブロックの座標と傾きの一覧を取得する関数
 返り値：(int)ブロックの数
@@ -416,7 +513,7 @@ void exchange_ctor(double cx, double cy, double* rx, double* ry){
 	
 	*rx = 0.4792*cy + 124.66;
 	*ry=0.3989*cx - 257.16;
-
+	
 	return;
 
 		}
@@ -860,21 +957,6 @@ void warpPers(BYTE *img){
 		cv::Point2f(1280, 960)
 	};
 	
-	/*640 480
-	// 変換前の画像での座標
-	const cv::Point2f src_pt[] = {
-		cv::Point2f(65, 0),
-		cv::Point2f(595, 0),
-		cv::Point2f(0, 480),
-		cv::Point2f(640, 480) };
-
-	// 変換後の画像での座標
-	const cv::Point2f dst_pt[] = {
-		cv::Point2f(0, 0),
-		cv::Point2f(640, 0),
-		cv::Point2f(0, 480),
-		cv::Point2f(640, 480)
-	};*/
 
 	//変換行列の計算
 	const cv::Mat homography_matrix = cv::getPerspectiveTransform(src_pt, dst_pt);
@@ -885,14 +967,11 @@ void warpPers(BYTE *img){
 
 	cv::warpPerspective(*img, *img, homography_matrix, img->size());
 
-	//このとき，
-	//robotX = 0.8088*imageY + 161.89, robotY = 0.6933*imageX - 222.32,
-	//これがこの画像の変形を使った場合の座標変換になります  
 }
 
 
 /*--------------------------------------------------
-処理:	
+処理:	画像の変形(ロボット用)
 返り値：なし
 引数:   変形したい画像のポインタ(上書き)
 --------------------------------------------------*/
@@ -924,4 +1003,1049 @@ BYTE get_sep_area(BYTE* img){
 	cv::Mat img_hough;
 	cv::HoughLines(img_canny, img_hough, 1, CV_PI / 256, 20);
 	//tyuu dann tyuu
+}
+
+
+/*--------------------------------------------------
+処理:トレイ(とか)の横の座標を取得()
+返り値：なし
+引数:  画像image，トレイのラベル番号label,座標格納用変数x,y)
+--------------------------------------------------*/
+void get_side_of_tray(cv::Mat image,int label,double *x, double *y){
+	double gx, gy, th,inclition;
+	get_cog(&image, label, &gx, &gy);
+	inclition=get_direction_2(&image, label,  &th);
+	std::cout<<rad2deg(th)<<" " << inclition << std::endl;
+
+
+
+}
+/*--------------------------------------------------
+処理:トレイの横の座標を取得，ガタガタやる
+返り値：なし
+引数:  なし
+--------------------------------------------------*/
+void grip_and_shake_tray(){
+	double gx, gy, th, deg;
+	int tray_label = -1;
+	cv::Mat image;
+
+	get_image_2(&image);
+	std::cout << "test" << std::endl;
+	//image = cv::imread("sozai/sozai1.png");
+	to_gray(&image);
+	cv::threshold(image, image, 0, 255, CV_THRESH_BINARY | CV_THRESH_OTSU);
+	/*
+	erosion(&image, 3);
+	dilation(&image, 3);
+	*/
+	cv::Mat lab;
+	int label_num = labeling(&image, &lab);
+	disp_labeled_image(&lab, "画像処理表示");
+	for (int i = 1; i <= label_num; i++){
+		if (160000 < get_size(&lab, i) && get_size(&lab, i) < 174000){
+			tray_label = i;
+			break;
+		}
+	}
+	if (tray_label == -1){
+		std::cout << "トレイ検出失敗" << std::endl;
+		return;
+	}
+	else{
+		get_cog(&lab, tray_label, &gx, &gy);
+		get_direction_2(&lab, tray_label, &th);
+		deg = rad2deg(th);
+
+		cv::waitKey();
+		std::cout << get_size(&lab, 1) << std::endl;
+		/*
+		while (!((-10 <= deg&&deg <= 10) || (deg <= -80 || 80 <= deg))){
+		std::cout << "向きがやばいので回転させます" << std::endl;
+		double side_cx, side_cy,side_gx,side_gy;
+		char mode;//U:画像上へアーム移動,D:画像下へアーム移動,R:画像右へアーム移動L:画像左へアーム移動
+		if (-45 >= deg && 45 <= deg){
+		if (gx < 960){
+		if (-45 >= deg){
+		mode = 'D';
+
+		}
+		else{
+		mode = 'U';
+
+		}
+		}
+		else{
+		if (45 <= deg){
+		mode = 'D';
+
+		}
+		else{
+		mode = 'U';
+
+		}
+		}
+		}
+		else{
+		if (deg > 0){
+		mode = 'L';
+
+		}
+		else{
+		mode = 'R';
+
+		}
+		}
+		grip();
+		exchange_ctor(side_cx, side_cy, &side_gx, &side_gy);
+		m_move_position(side_gx, side_gy, 210, 0, 180);
+		if (mode == 'D'){
+		m_move_straight(side_gx+50, side_gy, 210, 0, 180);
+		}
+		else if (mode == 'U'){
+		m_move_straight(side_gx-50, side_gy, 210, 0, 180);
+		}
+		else if (mode == 'R'){
+		m_move_straight(side_gx, side_gy+50, 210, 0, 180);
+		}
+		else if (mode == 'L'){
+		m_move_straight(side_gx, side_gy-50, 210, 0, 180);
+		}
+		m_home();
+		cv::waitKey();
+		//	get_image_2(&image);
+		image = cv::imread("sozai/sozai1.png");
+
+		to_gray(&image);
+		cv::threshold(image, image, 0, 255, CV_THRESH_BINARY | CV_THRESH_OTSU);
+
+		int label_num = labeling(&image, &lab);
+		for (int i = 1; i <= label_num; i++){
+		if (168000 < get_size(&lab, i) && get_size(&lab, i) < 174000){
+		tray_label = i;
+		break;
+		}
+		}
+		if (tray_label == -1){
+		std::cout << "トレイ検出失敗" << std::endl;
+		return;
+		}
+		get_cog(&lab, tray_label, &gx, &gy);
+		get_direction_2(&lab, tray_label, &th);
+		deg = rad2deg(th);
+		cv::waitKey();
+		}*/
+
+		ungrip();
+		std::cout << tray_label << "番をつかみます" << std::endl;
+		double grip_cx, grip_cy, grip_rx, grip_ry;
+		tray_where_to_grip(&lab, tray_label, &grip_cx, &grip_cy);
+		//cv::circle(*img_src, cv::Point(grip_cx, grip_cy), 30, cv::Scalar(200, 0, 0), -1, CV_AA);
+		exchange_ctor(grip_cx, grip_cy, &grip_rx, &grip_ry);
+		std::cout << grip_cx << " " << grip_cy << " " << grip_rx << " " << grip_ry << std::endl;
+
+		exchange_ctor(grip_cx, grip_cy, &grip_rx, &grip_ry);
+		std::cout << "ここへGO " << grip_rx << " " << grip_ry << std::endl;
+
+		cv::waitKey();
+		m_move_position_2(grip_rx - 10, grip_ry, 210, 0, 180);
+	
+		m_move_position_2(grip_rx - 10, grip_ry, 210, 0, 180);
+		m_move_position_2(grip_rx - 20, grip_ry, 210, 0, 160);
+		m_move_position_2(grip_rx - 40, grip_ry, 200, 0, 140);
+		m_move_position_2(grip_rx - 38, grip_ry, 195, 0, 140);
+		/*
+		m_move_position_2(grip_rx-50, grip_ry, 195, 0, 120);
+		m_move_straight(grip_rx - 50, grip_ry, 175, 0, 120);
+		*/
+		rsputs("GP 30,63,6");
+		grip();
+		wait_done();
+		m_move_position_2(180, 0, 480, 0, 140);
+		rsputs("GP 63,63,3");
+		wait_done();
+		std::cout << "shake" << std::endl;
+		shake();
+		m_move_position_2(280, 0, 200, 0, 140);
+		ungrip();
+		m_move_position_2(310, 0, 210, 0, 160);
+		m_move_position_2(350, 0, 210, 0, 180);
+		m_home();
+		wait_done();
+		ungrip();
+
+
+
+
+
+
+	}
+
+
+}
+
+/*--------------------------------------------------
+処理:トレイの横の座標を取得，受け取ったお金を回収
+返り値：なし
+引数:  なし
+--------------------------------------------------*/
+void grip_tray_and_getcoin(){
+	double gx, gy, th, deg;
+	int tray_label = -1;
+	cv::Mat image;
+
+	get_image_2(&image);
+	std::cout << "test" << std::endl;
+	//image = cv::imread("sozai/sozai1.png");
+	to_gray(&image);
+	cv::threshold(image, image, 0, 255, CV_THRESH_BINARY | CV_THRESH_OTSU);
+	/*
+	erosion(&image, 3);
+	dilation(&image, 3);
+	*/
+	cv::Mat lab;
+	int label_num = labeling(&image, &lab);
+	disp_labeled_image(&lab, "画像処理表示");
+	for (int i = 1; i <= label_num; i++){
+		if (160000 < get_size(&lab, i) && get_size(&lab, i) < 174000){
+			tray_label = i;
+			break;
+		}
+	}
+	if (tray_label == -1){
+		std::cout << "トレイ検出失敗" << std::endl;
+		return;
+	}
+	else{
+		get_cog(&lab, tray_label, &gx, &gy);
+		get_direction_2(&lab, tray_label, &th);
+		deg = rad2deg(th);
+
+		cv::waitKey();
+		std::cout << get_size(&lab, 1) << std::endl;
+		/*
+		while (!((-10 <= deg&&deg <= 10) || (deg <= -80 || 80 <= deg))){
+		std::cout << "向きがやばいので回転させます" << std::endl;
+		double side_cx, side_cy,side_gx,side_gy;
+		char mode;//U:画像上へアーム移動,D:画像下へアーム移動,R:画像右へアーム移動L:画像左へアーム移動
+		if (-45 >= deg && 45 <= deg){
+		if (gx < 960){
+		if (-45 >= deg){
+		mode = 'D';
+
+		}
+		else{
+		mode = 'U';
+
+		}
+		}
+		else{
+		if (45 <= deg){
+		mode = 'D';
+
+		}
+		else{
+		mode = 'U';
+
+		}
+		}
+		}
+		else{
+		if (deg > 0){
+		mode = 'L';
+
+		}
+		else{
+		mode = 'R';
+
+		}
+		}
+		grip();
+		exchange_ctor(side_cx, side_cy, &side_gx, &side_gy);
+		m_move_position(side_gx, side_gy, 210, 0, 180);
+		if (mode == 'D'){
+		m_move_straight(side_gx+50, side_gy, 210, 0, 180);
+		}
+		else if (mode == 'U'){
+		m_move_straight(side_gx-50, side_gy, 210, 0, 180);
+		}
+		else if (mode == 'R'){
+		m_move_straight(side_gx, side_gy+50, 210, 0, 180);
+		}
+		else if (mode == 'L'){
+		m_move_straight(side_gx, side_gy-50, 210, 0, 180);
+		}
+		m_home();
+		cv::waitKey();
+		//	get_image_2(&image);
+		image = cv::imread("sozai/sozai1.png");
+
+		to_gray(&image);
+		cv::threshold(image, image, 0, 255, CV_THRESH_BINARY | CV_THRESH_OTSU);
+
+		int label_num = labeling(&image, &lab);
+		for (int i = 1; i <= label_num; i++){
+		if (168000 < get_size(&lab, i) && get_size(&lab, i) < 174000){
+		tray_label = i;
+		break;
+		}
+		}
+		if (tray_label == -1){
+		std::cout << "トレイ検出失敗" << std::endl;
+		return;
+		}
+		get_cog(&lab, tray_label, &gx, &gy);
+		get_direction_2(&lab, tray_label, &th);
+		deg = rad2deg(th);
+		cv::waitKey();
+		}*/
+
+		ungrip();
+		std::cout << tray_label << "番をつかみます" << std::endl;
+		double grip_cx, grip_cy, grip_rx, grip_ry;
+		tray_where_to_grip(&lab, tray_label, &grip_cx, &grip_cy);
+		//cv::circle(*img_src, cv::Point(grip_cx, grip_cy), 30, cv::Scalar(200, 0, 0), -1, CV_AA);
+		exchange_ctor(grip_cx, grip_cy, &grip_rx, &grip_ry);
+		std::cout << grip_cx << " " << grip_cy << " " << grip_rx << " " << grip_ry << std::endl;
+
+		exchange_ctor(grip_cx, grip_cy, &grip_rx, &grip_ry);
+		std::cout << "ここへGO " << grip_rx << " " << grip_ry << std::endl;
+
+		cv::waitKey();
+		m_move_position_2(grip_rx - 10, grip_ry, 210, 0, 180);
+
+		m_move_position_2(grip_rx - 10, grip_ry, 210, 0, 180);
+		m_move_position_2(grip_rx - 20, grip_ry, 210, 0, 160);
+		m_move_position_2(grip_rx - 40, grip_ry, 200, 0, 140);
+		m_move_position_2(grip_rx - 38, grip_ry, 195, 0, 140);
+		/*
+		m_move_position_2(grip_rx-50, grip_ry, 195, 0, 120);
+		m_move_straight(grip_rx - 50, grip_ry, 175, 0, 120);
+		*/
+		rsputs("GP 30,63,6");
+		grip();
+		wait_done();
+		m_move_position_2(180, 0, 480, 0, 140);
+		rsputs("GP 63,63,3");
+		wait_done();
+		
+		m_move_position_2(160, 160, 250, 0, 140);
+		m_move_straight(160, 160, 250, -70, 130);
+		
+		m_move_straight(160, 160, 250, 0, 140);
+		m_move_position_2(280, 0, 200, 0, 140);
+		ungrip();
+		m_move_position_2(310, 0, 210, 0, 160);
+		m_move_position_2(350, 0, 210, 0, 180);
+		m_home();
+		wait_done();
+		ungrip();
+
+
+
+
+
+
+	}
+
+
+}
+void tray_where_to_grip(cv::Mat *image, int label, double *x, double *y){
+	int sum;
+	double x_min, x_max;
+	double gx,gy;
+	get_cog(image, label, &gx, &gy);
+	for (int i = 0; i < image->rows; i++){
+		sum = 0;
+		x_min = image->cols;
+		x_max = 0;
+		for (int j = 0; j < image->cols; j++){
+			if ((int)gray(image, i, j) == label){
+				x_min = std::min((double)j, x_min);
+				x_max = std::max((double)j, x_max);
+
+				sum++;
+			}
+		}
+		if (sum >= 300){
+			*x = (x_min + x_max) / 2;
+			*y = i;
+			return;
+		}
+	}
+}
+
+void shake(){
+	double dpos[5];
+	char cpos[3];
+	get_position(dpos, cpos);
+	speed_change(20);
+	m_move_position_2(dpos[0], dpos[1], dpos[2], dpos[3], dpos[4]);
+	Sleep(440);
+	m_move_position_2(dpos[0], dpos[1], dpos[2], dpos[3] + 35, dpos[4] - 10);
+	Sleep(440);
+	m_move_position_2(dpos[0], dpos[1], dpos[2], dpos[3], dpos[4]);
+	Sleep(440);
+	m_move_position_2(dpos[0], dpos[1], dpos[2], dpos[3] - 35, dpos[4] - 10);
+	Sleep(440);
+	m_move_position_2(dpos[0], dpos[1], dpos[2], dpos[3], dpos[4]);
+	Sleep(440);
+	m_move_position_2(dpos[0], dpos[1], dpos[2], dpos[3] + 35, dpos[4] - 10);
+	Sleep(440);
+	m_move_position_2(dpos[0], dpos[1], dpos[2], dpos[3], dpos[4]);
+	Sleep(440);
+	m_move_position_2(dpos[0], dpos[1], dpos[2], dpos[3] - 35, dpos[4] - 10);
+	Sleep(440);
+	m_move_position_2(dpos[0], dpos[1], dpos[2], dpos[3], dpos[4]);
+	Sleep(440);
+	m_move_position_2(dpos[0], dpos[1], dpos[2], dpos[3]+15, dpos[4] + 25);
+	Sleep(440);
+	m_move_position_2(dpos[0], dpos[1], dpos[2], dpos[3], dpos[4]);
+	Sleep(440);
+	m_move_position_2(dpos[0], dpos[1], dpos[2] + 100, dpos[3]+8, dpos[4] - 30);
+	Sleep(440);
+	m_move_position_2(dpos[0], dpos[1], dpos[2], dpos[3], dpos[4]);
+	Sleep(440);
+
+	m_move_position_2(dpos[0], dpos[1], dpos[2], dpos[3] + 35, dpos[4] - 10);
+	Sleep(440);
+	m_move_position_2(dpos[0], dpos[1], dpos[2], dpos[3], dpos[4]);
+	Sleep(440);
+	m_move_position_2(dpos[0], dpos[1], dpos[2], dpos[3] - 35, dpos[4] - 10);
+	Sleep(440);
+	m_move_position_2(dpos[0], dpos[1], dpos[2], dpos[3], dpos[4]);
+	Sleep(440);
+	m_move_position_2(dpos[0], dpos[1], dpos[2], dpos[3] + 35, dpos[4] - 10);
+	Sleep(440);
+	m_move_position_2(dpos[0], dpos[1], dpos[2], dpos[3], dpos[4]);
+	Sleep(440);
+	m_move_position_2(dpos[0], dpos[1], dpos[2], dpos[3] - 35, dpos[4] - 10);
+	Sleep(440);
+	m_move_position_2(dpos[0], dpos[1], dpos[2], dpos[3], dpos[4]);
+	Sleep(440);
+	m_move_position_2(dpos[0], dpos[1], dpos[2], dpos[3] + 13, dpos[4] + 25);
+	Sleep(440);
+	m_move_position_2(dpos[0], dpos[1], dpos[2], dpos[3], dpos[4]);
+	Sleep(440);
+	m_move_position_2(dpos[0], dpos[1], dpos[2] + 100, dpos[3] - 8, dpos[4] - 30);
+	Sleep(440);
+	m_move_position_2(dpos[0], dpos[1], dpos[2], dpos[3], dpos[4]);
+	speed_change(15);
+	
+m_move_position_2(dpos[0], dpos[1], dpos[2], dpos[3] , dpos[4]);
+
+}
+
+/*--------------------------------------------------
+処理:	ラベリングされた図形の方向を求める関数
+返り値：傾きdouble
+引数:   ラベリングされた画像＜*img＞，ラベル番号<label>，重心（get_cog()で取得）＜*gx＞＜*gy＞,
+重心格納用変数＜theta＞
+--------------------------------------------------*/
+double get_direction_2(BYTE *img, int label, double *theta){
+	double gx, gy;
+	get_cog(img, label, &gx, &gy);
+
+	double s11 = 0, s12 = 0, s22 = 0;
+	for (int i = 0; i < img->rows; i++){
+		for (int j = 0; j < img->cols; j++){
+			if ((int)gray(img, i, j) == label){
+				s11 += (j - gx)*(j - gx);
+				s12 += (j - gx)*(i - gy);
+				s22 += (i - gy)*(i - gy);
+			}
+		}
+	}
+	double lambda = (s11 + s22 + sqrt(s11*s11 + s22*s22 - 2 * s11*s22 + 4 * s12*s12)) / 2;
+	double result = std::atan2(lambda - s11, s12);
+	if (rad2deg(result) > 90){
+		result -= M_PI;
+	}
+	*theta = result;
+	//std::cout << (lambda - s11) << " " << (s12) << " " << (lambda - s11 )/( s12)<< std::endl;
+	return (lambda - s11) / (s12);
+}
+
+
+
+/*--------------------------------------------------
+処理:	弧度法から度数法を
+返り値：度数法のけっか
+引数:   弧度法のrad
+--------------------------------------------------*/
+double rad2deg(double rad){
+
+	return rad * 180 / (M_PI);
+}
+
+
+/*--------------------------------------------------
+処理:	画像を撮影ｍ透視変換(warpPers())済みのものを返す
+返り値:なし
+引数:   画像格納用変数<image>
+--------------------------------------------------*/
+void get_image_2(cv::Mat *image){
+	get_image(image);
+	warpPers(image);
+}
+
+
+/*--------------------------------------------------
+処理:	画像を撮影,マーカをひろって価格判断
+返り値:合計価格
+引数:   なし
+--------------------------------------------------*/
+int find_marker_and_get_price_prototype(){
+
+
+	int result=0;
+	cv::Mat img = cv::imread("marker/test4.png");
+	//get_image_2(&img);
+	std::map<int, cv::Mat> mp;
+	/*
+	mp[10] = cv::imread("marker/10.png",0);
+	mp[100] = cv::imread("marker/100.png",0);
+	*/
+	mp[42] = cv::imread("marker/42.png", 0);
+	mp[77] = cv::imread("marker/77.png", 0);
+	mp[120] = cv::imread("marker/120.png", 0);
+	mp[330] = cv::imread("marker/330.png", 0);
+	
+	
+	
+	disp_image(&img, "");
+	cv::waitKey();
+
+	
+	cv::waitKey();
+	to_gray(&img);
+	cv::threshold(img, img, 0, 255, CV_THRESH_BINARY | CV_THRESH_OTSU);
+	cv::Mat *labeled=new cv::Mat;
+	int label_num = labelling(&img,labeled),size;
+	disp_labeled_image(labeled, "");
+	cv::waitKey();
+	// 変換後の画像での座標
+	const cv::Point2f dst_pt[] = {
+		cv::Point2f(0, 0),
+		cv::Point2f(505, 0),
+		cv::Point2f(0, 505),
+		cv::Point2f(505, 505)
+	};
+	cv::Mat tmp,match_result_mat;
+	cv::Rect roi(cv::Point(0, 0), cv::Size(500, 500));
+	
+	
+	std::map<int,double> result_of_match;
+
+
+	for (int i = 1; i <= label_num; i++){
+		size = get_size(labeled,i);
+		std::cout << i << " " << size << std::endl;
+		disp_labeled_image(labeled, "");
+		cv::waitKey();
+		if (size >= 1000 && size <= 100000){
+			std::cout << "マーカくらいのおおきさ?" << std::endl;
+			
+
+			cv::Point2f src_pt[4];
+			
+			for (int j = 0; j < labeled->rows; j++){
+				for (int k = 0; k < labeled->cols; k++){
+					if ((int)gray(labeled, j, k) == i){
+						src_pt[0] = cv::Point2f(k, j+3);
+						
+					}
+				}
+			}
+			for (int k = labeled->cols-1; k >=0; k--){
+				for (int j = 0; j < labeled->rows; j++){
+				
+					if ((int)gray(labeled, j, k) == i){
+						src_pt[1] = cv::Point2f(k-3, j);
+
+					}
+				}
+			}
+			
+			
+			
+			for (int k = 0; k<labeled->cols; k++){
+				for (int j = labeled->rows - 1; j >= 0; j--){
+			
+					if ((int)gray(labeled, j, k) == i){
+						src_pt[2] = cv::Point2f(k+3, j);
+
+					}
+				}
+			}
+			for (int j = labeled->rows - 1; j >= 0; j--){
+				for (int k = labeled->cols - 1; k >= 0; k--){
+					if ((int)gray(labeled, j, k) == i){
+						src_pt[3] = cv::Point2f(k , j-3);
+
+					}
+				}
+			}
+			//変換行列の計算
+			const cv::Mat homography_matrix = cv::getPerspectiveTransform(src_pt, dst_pt);
+
+
+			cv::warpPerspective(img, tmp, homography_matrix, img.size());
+			tmp = tmp(roi);
+			disp_image(&tmp,"");
+			for (auto &y : result_of_match){
+
+				y.second = 0;
+
+			}
+			for (auto x : mp){
+			
+
+				std::cout << "価格 "<<x.first << std::endl;
+				disp_image(&tmp, "");
+				//cv::waitKey();
+				cv::matchTemplate(tmp, x.second, match_result_mat, CV_TM_SQDIFF);
+				cv::Point max_pt;
+				double maxVal;
+		
+				cv::matchTemplate(tmp, x.second, match_result_mat, 3);
+				cv::minMaxLoc(match_result_mat, NULL, &maxVal, NULL, &max_pt);
+				result_of_match[x.first] = max(maxVal, result_of_match[x.first]);
+				for (auto y:result_of_match){
+					std::cout << y.second << " ";
+
+				}std::cout << std::endl;
+				rot_90(tmp);
+				disp_image(&tmp, "");
+				//cv::waitKey();	
+				cv::matchTemplate(tmp, x.second, match_result_mat, 3);
+				cv::minMaxLoc(match_result_mat, NULL, &maxVal, NULL, &max_pt);
+				result_of_match[x.first] = max(maxVal, result_of_match[x.first]);
+				for (auto y : result_of_match){
+					std::cout << y.second << " ";
+
+				}std::cout << std::endl;
+				rot_90(tmp);
+				disp_image(&tmp, "");
+				//cv::waitKey();
+				cv::matchTemplate(tmp, x.second, match_result_mat, 3);
+				cv::minMaxLoc(match_result_mat, NULL, &maxVal, NULL, &max_pt);
+				result_of_match[x.first] = max(maxVal, result_of_match[x.first]);
+				for (auto y : result_of_match){
+					std::cout << y.second << " ";
+
+				}std::cout << std::endl;
+				rot_90(tmp);
+				disp_image(&tmp, "");
+				cv::waitKey();
+				cv::matchTemplate(tmp, x.second, match_result_mat, 3);
+				cv::minMaxLoc(match_result_mat, NULL, &maxVal, NULL, &max_pt);
+				result_of_match[x.first] = max(maxVal, result_of_match[x.first]);
+				for (auto y : result_of_match){
+					std::cout << y.second << " ";
+
+				}std::cout << std::endl;
+			
+		
+
+
+
+				std::cout<<std::endl;
+			}
+			int tmp_result = 0;
+			double tmp_match_level=0;
+			for (auto x : result_of_match){
+				if (x.second >= 0.90){
+					if (tmp_match_level < x.second){
+						tmp_match_level = x.second,
+						tmp_result = x.first;
+					}
+				}
+			}
+			cout << tmp_result << endl;
+			result += tmp_result;
+			//cv::waitKey();
+		
+		}
+		else{
+
+			std::cout << "こいつはマーカではなさそう..." << std::endl;
+		
+		}
+
+		std::cout << std::endl;
+	}
+	return result;
+}
+
+
+/*--------------------------------------------------
+処理:	受け取った画像を90ド回転
+返り値:回した画像
+引数:   回したい画像
+--------------------------------------------------*/
+void rot_90(cv::Mat &img){
+	cv::Rect roi_rect(0, 0, img.cols, img.rows);
+	cv::Mat src_roi(img, roi_rect);
+	cv::Mat dst_roi(img, roi_rect);
+
+	// (2)With specified three parameters (angle, rotation center, scale)
+	//    calculate an affine transformation matrix by cv2DRotationMatrix
+	double angle = -90.0, scale = 1.0;
+	cv::Point2d center(src_roi.cols*0.5, src_roi.rows*0.5);
+	const cv::Mat affine_matrix = getRotationMatrix2D(center, angle, scale);
+
+	// (3)rotate the image by warpAffine taking the affine matrix
+	warpAffine(src_roi, img, affine_matrix, dst_roi.size(), cv::INTER_LINEAR, cv::BORDER_CONSTANT, cv::Scalar::all(255));
+
+}
+
+
+
+/*--------------------------------------------------
+処理:	事前準備用:おつり用硬貨の場所を決めるための関数，アームが移動してくのでそこに硬貨を置く
+返り値:なし
+引数:   なし
+--------------------------------------------------*/
+void check_where_coin(){
+	speed_change(13);
+	m_move_straight(160, 160, 250.7, 0, 180);
+	getchar();
+	m_grip();
+	getchar();
+	m_ungrip();
+	m_move_straight(160, 160, 250.7, 90, 180);
+	getchar();
+	m_grip();
+	getchar();
+	m_ungrip();
+	m_home();
+	m_move_straight(160, 220, 250.7, 0, 180);
+	m_grip();
+	getchar();
+	m_ungrip();
+	m_move_straight(160, 220, 250.7, 90, 180);
+	m_grip();
+	getchar();
+	m_ungrip();
+	m_home();
+	m_move_straight(220, 160, 250.7, 0, 180);
+	m_grip();
+	getchar();
+	m_ungrip();
+	m_move_straight(220, 160, 250.7, 90, 180);
+	m_grip();
+	getchar();
+	m_ungrip();
+	m_home();
+	m_move_straight(220, 220, 250.7, 0, 180);
+	m_grip();
+	getchar();
+	m_ungrip();
+	m_move_straight(220, 220, 250.7, 90, 180);
+	m_grip();
+	getchar();
+	m_ungrip();
+	m_home();
+	m_move_straight(280, 160, 250.7, 0, 180);
+	m_home();
+	m_grip();
+	getchar();
+	m_move_straight(280, 160, 250.7, 90, 180);
+	m_home();
+	m_grip();
+	getchar();
+	m_ungrip();
+	m_move_straight(280, 220, 250.7, 0, 180);
+	m_home();
+	m_grip();
+	getchar();
+	m_move_straight(280, 220, 250.7, 90, 180);
+	m_home();
+	m_grip();
+	getchar();
+	m_ungrip();
+
+
+}
+
+void return_change(map<long long int, long long int> coin){
+	/*
+	硬貨の種類	直径	厚み	孔径	重さ
+	1円	20.0mm	約1.5mm	-	1g
+	5円	22.0mm	約1.5mm	5mm	3.75g
+	10円	23.5mm	約1.5mm	-	4.5g
+	50円	21.0mm	約1.7mm	4mm	4g
+	100円	22.6mm	約1.7mm	-	4.8g
+	500円	26.5mm	約1.8mm	-	7g
+	*/
+	/*
+	m_move_straight(160, 160, 250, 0, 180);
+	m_move_straight(160, 220, 250, 0, 180);
+	m_move_straight(220, 160, 250, 0, 180);
+	m_move_straight(220, 220, 250, 0, 180);
+	m_move_straight(280, 160, 250, 0, 180);
+	m_move_straight(280, 220, 250, 0, 180);
+
+	*/
+	map<long long int, double> thickness;
+	thickness[1] = 1.5;
+	thickness[5] = 1.5;
+	thickness[10] = 1.5;
+	thickness[50] = 1.7;
+	thickness[100] = 1.7;
+	thickness[500] = 1.8;
+
+	for (int i = 1; i <= coin[1]; i++){
+		m_home();
+		m_move_straight(160, 160, 250+(thickness[1]*(5.5-(double)i)), 0, 180);
+		grip();
+		m_move_position_2(400, 0, 270, 0, 180);
+		ungrip();
+	}
+	for (int i = 1; i <= coin[5]; i++){
+		m_home();
+
+		m_move_straight(160, 220, 250 + (thickness[5] * (5.5 - (double)i)), 0, 180);
+		grip();
+		m_move_position_2(400, 0, 270, 0, 180);
+		ungrip();
+	}
+	for (int i = 1; i <= coin[10]; i++){
+		m_home();
+		m_move_straight(220, 160, 250 + (thickness[10] * (5.5 - (double)i)), 0, 180);
+		grip();
+		m_move_position_2(400, 0, 270, 0, 180);
+		ungrip();
+	}
+	for (int i = 1; i <= coin[50]; i++){
+		m_home();
+		m_move_straight(220, 220, 250 + (thickness[50] * (5.5 - (double)i)), 0, 180);
+		grip();
+		m_move_position_2(400, 0, 270, 0, 180);
+		ungrip();
+	}
+	for (int i = 1; i <= coin[100]; i++){
+		m_home();
+		m_move_straight(280, 160, 250 + (thickness[100] * (5.5 - (double)i)), 0, 180);
+		grip();
+		m_move_position_2(400, 0, 270, 0, 180);
+		ungrip();
+
+	}
+	for (int i = 1; i <= coin[500]; i++){
+		m_home();
+		m_move_straight(280, 220, 250 + (thickness[500] * (5.5 - (double)i)), 0, 180);
+		grip();
+		m_move_position_2(400, 0, 270, 0, 180);
+		ungrip();
+	}
+	m_home();
+
+
+}
+
+/*--------------------------------------------------
+処理:	合計金額と受け取ったお金からだすべきお釣りの貨幣を計算
+返り値： 各貨幣をキーとし，中に枚数が入っている連想配列
+引数:    うけとったお金<received>, 合計金額<totalprice>
+--------------------------------------------------*/
+std::map<long long int, long long int> accounting(long long int received, long long int total_price){
+	long long int otsuri = received - total_price;
+	//存在しうる貨幣をここで指定
+	std::set<long long int>st = { 1, 5, 10, 50, 100, 500 };
+
+	std::map<long long int, long long int> result;
+	if (otsuri<0){
+		std::cout << "受け取ったお金では足りません!!!" << std::endl;
+		return result;
+	}
+	else{
+		//setのなかでおおきい貨幣から順にできるかぎりたくさん枚数を出していく
+		std::set<long long int>::reverse_iterator i = st.rbegin();
+		while (i != st.rend()){
+			result[*i] = otsuri / (*i);
+			otsuri %= (*i);
+			i++;
+		}
+		return result;
+	}
+}
+
+int ar_read(cv::Mat *image){
+	cv::Mat im = *image;
+	cv::Mat *img = &im;
+	vector<vector<double>> grid(6, vector<double>(6));
+	cv::Mat out;
+	cv::Rect rect;
+	for (int i = 0; i < 6; i++){
+		for (int j = 0; j < 6; j++){
+			
+			rect = cv::Rect(j*img->cols / 6, i*img->rows / 6, img->cols / 6, img->rows / 6);
+			out=(*img)(rect);
+			grid[i][j]=average_of_Mat(&out);
+			cout << grid[i][j] << " ";
+		}
+		cout << endl;
+	}if (is_marker(grid)){
+		return ar_to_price(grid);
+	}
+	else{
+		rot_90(im);
+		for (int i = 0; i < 6; i++){
+			for (int j = 0; j < 6; j++){
+
+				rect = cv::Rect(j*img->cols / 6, i*img->rows / 6, img->cols / 6, img->rows / 6);
+				out = (*img)(rect);
+				grid[i][j] = average_of_Mat(&out);
+				cout << grid[i][j] << " ";
+			}
+			cout << endl;
+		}if (is_marker(grid)){
+			return ar_to_price(grid);
+		}
+		else{
+			rot_90(im);
+			for (int i = 0; i < 6; i++){
+				for (int j = 0; j < 6; j++){
+
+					rect = cv::Rect(j*img->cols / 6, i*img->rows / 6, img->cols / 6, img->rows / 6);
+					out = (*img)(rect);
+					grid[i][j] = average_of_Mat(&out);
+					cout << grid[i][j] << " ";
+				}
+				cout << endl;
+			}if (is_marker(grid)){
+				return ar_to_price(grid);
+			}
+			else{
+				rot_90(im);
+				for (int i = 0; i < 6; i++){
+					for (int j = 0; j < 6; j++){
+
+						rect = cv::Rect(j*img->cols / 6, i*img->rows / 6, img->cols / 6, img->rows / 6);
+						out = (*img)(rect);
+						grid[i][j] = average_of_Mat(&out);
+						cout << grid[i][j] << " ";
+					}
+					cout << endl;
+				}if (is_marker(grid)){
+					return ar_to_price(grid);
+				}
+				
+			}
+
+		}
+	}
+	std::cout << "こいつはマーカではなさそう" << std::endl;
+	return 0;
+}
+int find_marker_and_get_price(){
+
+	int result = 0;
+	cv::Mat img = cv::imread("marker/test3.bmp");
+	//get_image_2(&img);
+	cv::Mat image_source = img;
+	disp_image(&img, "");
+	cv::waitKey();
+
+
+	to_gray(&img);
+	cv::threshold(img, img, 0, 255, CV_THRESH_BINARY | CV_THRESH_OTSU);
+	disp_image(&img, "");
+	cv::waitKey();
+
+	
+	disp_image(&img, "");
+	cv::waitKey();
+	// 変換後の画像での座標
+	const cv::Point2f dst_pt[] = {
+		cv::Point2f(0, 0),
+		cv::Point2f(505, 0),
+		cv::Point2f(0, 505),
+		cv::Point2f(505, 505)
+	};
+	cv::Rect roi(cv::Point(2, 2), cv::Size(502, 502));
+
+
+	std::map<int, double> result_of_match;
+
+
+	disp_image(&image_source, "");
+	cv::waitKey();
+	std::vector<std::vector<cv::Point>> contours;
+	std::vector<cv::Vec4i> hierarchy;
+	cv::findContours(img, contours, hierarchy, cv::RETR_EXTERNAL, cv::CHAIN_APPROX_TC89_L1);
+	cv::Mat tmp;
+	int max_level = 0;
+	for (int i = 0; i < contours.size(); i++) {
+		// ある程度の面積が有るものだけに絞る
+		double a = contourArea(contours[i], false);
+		if (a > 500) {
+			//輪郭を直線近似する
+			std::vector<cv::Point> approx;
+			cv::approxPolyDP(cv::Mat(contours[i]), approx, 0.1 * cv::arcLength(contours[i], true), true);
+			// 矩形のみ取得
+			std::cout << approx.size() << std::endl;
+			if (approx.size() == 4) {
+				cv::Point2f src_pt[4];
+				src_pt[0] = approx[0];
+				src_pt[1] = approx[1];
+				src_pt[2] = approx[3];
+				src_pt[3] = approx[2];
+				const cv::Mat homography_matrix = cv::getPerspectiveTransform(src_pt, dst_pt);
+				cv::warpPerspective(image_source, tmp, homography_matrix, image_source.size());
+				tmp = tmp(roi);
+				disp_image(&tmp, "");
+				cv::waitKey();
+				int tmp_price = ar_read(&tmp);
+				std::cout << tmp_price << std::endl;
+				result += tmp_price;
+			}
+		}
+	}
+
+	return result;
+}
+int ar_to_price(vector<vector<double>> grid_double){
+	/*
+	□ □ □ □ □ □
+	□ ■ □  1 ■ □
+	□ □  2 □  4 □
+	□ 8  16 32 64 □
+	□ ■128 256□ □
+	□ □ □ □ □ □
+	*/
+	vector<vector<int>> grid(6,vector<int>(6));
+	
+	for (int i = 0; i < 6; i++){
+		for (int j = 0; j < 6; j++){
+			grid[i][j] = (grid_double[i][j] < 128) ? 1 : 0;
+		}
+	}
+	int result = 0;
+	result += grid[1][3] * 1 
+		+ grid[2][2] * 2 + grid[2][4] * 4
+		+ grid[3][1] * 8 + grid[3][2] * 16 + grid[3][3] * 32 + grid[3][4] * 64
+		+ grid[4][2] * 128 + grid[4][3] * 256;
+	return result;
+
+}
+bool is_marker(vector<vector<double>> grid){
+	if (grid[1][1]<80 && grid[4][1]<80 && grid[1][4]<80 && grid[2][1]>180 && grid[2][3]>180 && grid[1][2]>180 && grid[4][4]>180){
+		return true;
+	}
+	else{
+		return false;
+	}
+
+}
+double average_of_Mat(cv::Mat *img){
+	double result = 0, img_size = img->rows*img->cols;
+	for (int i = 0; i < img->rows; i++){
+		for (int j = 0; j < img->cols; j++){
+			result += double(gray(img, i, j))/img_size;
+		}
+	}
+	return result;
 }
