@@ -35,6 +35,7 @@ extern BYTE *img_work3;
 /**************************************************/
 
 
+
 /***************************************************
 プロトタイプ宣言: ユーザ定義関数の宣言を記述
 ***************************************************/
@@ -77,30 +78,107 @@ double get_direction_2(BYTE *img, int label, double* theta);//方向を取得す
 double rad2deg(double rad);//弧度法を入力すると弧度法で返す
 void tray_where_to_grip(cv::Mat *image, int label, double *x, double *y);//トレイで掴みやすそうなとこを探す
 void get_image_2(cv::Mat *image);//透視変換済みの画像を撮影
-void rot_90(cv::Mat &img);
+void rot_90(cv::Mat &img);//90ド回転
 int find_marker_and_get_price_prototype();//ARマーカ風のオブジェクトで値段計算
 int find_marker_and_get_price();//ARマーカ風のオブジェクトで値段計算
-double average_of_Mat(cv::Mat *img);
-int ar_read(cv::Mat *img);
-bool is_marker(vector<vector<double>> grid);
-int ar_to_price(vector<vector<double>> grid_double);
+double average_of_Mat(cv::Mat *img);//白黒画像の平均を取る
+int ar_read(cv::Mat *img);//ARの切り抜き画像を読んで数値化
+bool is_marker(vector<vector<double>> grid);//マーカーか判断
+int ar_to_price(vector<vector<double>> grid_double);//ar_read()の内部で数値化に使う
 /*連携部分*/
 void exchange_ctor(double cx, double cy, double* rx, double* ry);//画像座標系からロボット座標系に変換
 void do_zeroin();//実行すると座標の調整を行う
 void eject_block();//実行するとブロックの取り除き動作を行う
 void grip_and_shake_tray();//トレイを掴み，ゆらして置く
 void grip_tray_and_getcoin();//受け取ったお金を回収
-void return_change(map<long long int, long long int> coin);
+void return_change(map<long long int, long long int> coin);//お釣りをトレイに
 /**************************************************/
-std::map<long long int, long long int> accounting(long long int received, long long int total_price);
+std::map<long long int, long long int> accounting(long long int received, long long int total_price);//返すべきお釣りの内訳をしらべる
 
+//レジとかのがめんのやつ～
+class Cashregister_display{
+public:
+	Cashregister_display(){
+		std::cout << "unko" << std::endl;
+		display_image = cv::Mat::zeros(500, 800, CV_8UC3);
+
+		received = -1;
+		total_price = -1;
+		change = -1;
+		update();
+	}
+	void add_total_price(long long int price){
+		display_image = cv::Mat::zeros(500, 800, CV_8UC3);
+		if (total_price < 0&&price>0){
+			total_price = 0;
+		}
+
+		total_price += price;
+		update();
+	}
+	void set_received(int re){
+		received = re;
+		update();
+	}
+	void set_change(int ch){
+		change = ch;
+		update();
+	}
+private:
+	void update(){
+		display_image = cv::Mat::zeros(500, 800, CV_8UC3);
+		std::string tmp;
+		if (total_price >= 0){
+			tmp = "";
+			for (int i = 5; i > log10(total_price); i--){
+				tmp.push_back(' ');
+			}
+			putText(display_image, "total price:"+tmp+ std::to_string(total_price), cv::Point(20, 80), 0, 2, cv::Scalar(0, 255, 99), 6, CV_AA);
+		}
+		if (received >= 0){
+			tmp = "";
+			for (int i = 5; i > log10(received); i--){
+				tmp.push_back(' ');
+			}
+			putText(display_image, "received  :"+tmp + std::to_string(received), cv::Point(20, 160), 0, 2, cv::Scalar(0, 255, 99), 6, CV_AA);
+		}
+		if (change >= 0){
+			tmp = "";
+			for (int i = 5; i > log10(change); i--){
+				tmp.push_back(' ');
+			}
+			putText(display_image, "change   :"+tmp  + std::to_string(change), cv::Point(20, 240), 0 ,2,cv::Scalar(0, 255, 99), 6, CV_AA);
+		}
+		if (total_price < 0 && received < 0 && change < 0){
+			putText(display_image, "Welcome !!", cv::Point(220,240 ), cv::FONT_HERSHEY_SIMPLEX, 2, cv::Scalar(0, 255, 99), 6, CV_AA);
+			putText(display_image, "Please put Product here", cv::Point(100, 300), cv::FONT_HERSHEY_SIMPLEX, 1.5, cv::Scalar(0, 255, 99), 6, CV_AA);
+		}
+		cv::waitKey(2);
+		cv::imshow("H10店へようこそ", display_image);
+		cv::waitKey(2);
+	}
+	cv::Mat display_image;
+	long long int received, total_price, change;
+
+};
+
+
+
+//ポインタをｸﾞﾛｰｰｰﾊﾞﾙ宣言，他の関数内から呼び出すため インスタンスはmainfuncのはじめで作成
+Cashregister_display *cash_disp;
 
 /***************************************************
 mainfunc: メイン処理（実際の処理を記述）
 ***************************************************/
 void mainfunc(HDC *hDC) {
 
+	//カメラの解像度設定，必須
+	cap.set(CV_CAP_PROP_FRAME_WIDTH, 1280);
+	cap.set(CV_CAP_PROP_FRAME_HEIGHT, 960);
 
+	//レジ画面の実体化
+	cash_disp = new Cashregister_display();
+	cv::waitKey();
 	/*
 	cv::Mat img=	cv::imread("sozai.png",0);
 	
@@ -108,13 +186,27 @@ void mainfunc(HDC *hDC) {
 	
 	disp_image(&img, "");
 	cv::waitKey();
-	cap.set(CV_CAP_PROP_FRAME_WIDTH, 1280);
-	cap.set(CV_CAP_PROP_FRAME_HEIGHT, 960);
+	
 	
 	cv::waitKey();
 	*/
+
 	std::cout << find_marker_and_get_price() << std::endl;
+
+	cv::waitKey();
+	cash_disp->set_received(20);
+	cv::waitKey();
+	cash_disp->set_received(200);
+	cv::waitKey();
+	cash_disp->set_change(200);
+	cv::waitKey();
+	/*
+
+	check_where_coin();
+	grip_and_shake_tray();
+	grip_tray_and_getcoin()
 	//grip_and_shake_tray();
+	*/
 }
 /**************************************************/
 
@@ -1349,6 +1441,13 @@ void grip_tray_and_getcoin(){
 
 
 }
+
+
+/*--------------------------------------------------
+処理:   トレイの掴むべき場所を探す
+戻り値: void
+引数:  ラベリング済み画像image,トレイのラベル番号label,格納変数x,y
+--------------------------------------------------*/
 void tray_where_to_grip(cv::Mat *image, int label, double *x, double *y){
 	int sum;
 	double x_min, x_max;
@@ -1490,7 +1589,7 @@ void get_image_2(cv::Mat *image){
 
 
 /*--------------------------------------------------
-処理:	画像を撮影,マーカをひろって価格判断
+処理:	画像を撮影,マーカをひろって価格判断 もういらない(小声)
 返り値:合計価格
 引数:   なし
 --------------------------------------------------*/
@@ -1768,6 +1867,12 @@ void check_where_coin(){
 
 }
 
+
+/*--------------------------------------------------
+処理:	お釣りをトレイに乗せる
+戻り値: void
+引数:   返す硬貨coin
+--------------------------------------------------*/
 void return_change(map<long long int, long long int> coin){
 	/*
 	硬貨の種類	直径	厚み	孔径	重さ
@@ -1871,6 +1976,12 @@ std::map<long long int, long long int> accounting(long long int received, long l
 	}
 }
 
+
+/*--------------------------------------------------
+処理:   ARマーカかの判定+数値化
+戻り値: マーカの価格
+引数:   切り出したマーカの画像image
+--------------------------------------------------*/
 int ar_read(cv::Mat *image){
 	cv::Mat im = *image;
 	cv::Mat *img = &im;
@@ -1883,10 +1994,12 @@ int ar_read(cv::Mat *image){
 			rect = cv::Rect(j*img->cols / 6, i*img->rows / 6, img->cols / 6, img->rows / 6);
 			out=(*img)(rect);
 			grid[i][j]=average_of_Mat(&out);
-			cout << grid[i][j] << " ";
+		//	cout << grid[i][j] << " ";
 		}
-		cout << endl;
+		//cout << endl;
 	}if (is_marker(grid)){
+		disp_image(img, "");
+		cv::waitKey();
 		return ar_to_price(grid);
 	}
 	else{
@@ -1897,10 +2010,12 @@ int ar_read(cv::Mat *image){
 				rect = cv::Rect(j*img->cols / 6, i*img->rows / 6, img->cols / 6, img->rows / 6);
 				out = (*img)(rect);
 				grid[i][j] = average_of_Mat(&out);
-				cout << grid[i][j] << " ";
+			///	cout << grid[i][j] << " ";
 			}
-			cout << endl;
+		//	cout << endl;
 		}if (is_marker(grid)){
+			disp_image(img, "");
+			cv::waitKey();
 			return ar_to_price(grid);
 		}
 		else{
@@ -1911,10 +2026,12 @@ int ar_read(cv::Mat *image){
 					rect = cv::Rect(j*img->cols / 6, i*img->rows / 6, img->cols / 6, img->rows / 6);
 					out = (*img)(rect);
 					grid[i][j] = average_of_Mat(&out);
-					cout << grid[i][j] << " ";
+					//cout << grid[i][j] << " ";
 				}
-				cout << endl;
+			//	cout << endl;
 			}if (is_marker(grid)){
+				disp_image(img, "");
+				cv::waitKey();
 				return ar_to_price(grid);
 			}
 			else{
@@ -1925,10 +2042,12 @@ int ar_read(cv::Mat *image){
 						rect = cv::Rect(j*img->cols / 6, i*img->rows / 6, img->cols / 6, img->rows / 6);
 						out = (*img)(rect);
 						grid[i][j] = average_of_Mat(&out);
-						cout << grid[i][j] << " ";
+					//	cout << grid[i][j] << " ";
 					}
-					cout << endl;
+					//cout << endl;
 				}if (is_marker(grid)){
+					disp_image(img, "");
+					cv::waitKey();
 					return ar_to_price(grid);
 				}
 				
@@ -1936,56 +2055,152 @@ int ar_read(cv::Mat *image){
 
 		}
 	}
+	cv::flip(im, im, 0);
+	disp_image(img, "");
+	for (int i = 0; i < 6; i++){
+		for (int j = 0; j < 6; j++){
+
+			rect = cv::Rect(j*img->cols / 6, i*img->rows / 6, img->cols / 6, img->rows / 6);
+			out = (*img)(rect);
+			grid[i][j] = average_of_Mat(&out);
+			//	cout << grid[i][j] << " ";
+		}
+		//cout << endl;
+	}
+	disp_image(image, "");
+	if (is_marker(grid)){
+		disp_image(img, "");
+		return ar_to_price(grid);
+	}
+	else{
+		rot_90(im);
+		for (int i = 0; i < 6; i++){
+			for (int j = 0; j < 6; j++){
+
+				rect = cv::Rect(j*img->cols / 6, i*img->rows / 6, img->cols / 6, img->rows / 6);
+				out = (*img)(rect);
+				grid[i][j] = average_of_Mat(&out);
+				///	cout << grid[i][j] << " ";
+			}
+			//	cout << endl;
+		}
+		disp_image(img, "");
+		if (is_marker(grid)){
+			disp_image(image, "");
+			return ar_to_price(grid);
+		}
+		else{
+			rot_90(im);
+			for (int i = 0; i < 6; i++){
+				for (int j = 0; j < 6; j++){
+
+					rect = cv::Rect(j*img->cols / 6, i*img->rows / 6, img->cols / 6, img->rows / 6);
+					out = (*img)(rect);
+					grid[i][j] = average_of_Mat(&out);
+					//cout << grid[i][j] << " ";
+				}
+				//	cout << endl;
+			}
+			
+			disp_image(img, "");
+			if (is_marker(grid)){
+				disp_image(image, "");
+				return ar_to_price(grid);
+			}
+			else{
+				rot_90(im);
+				for (int i = 0; i < 6; i++){
+					for (int j = 0; j < 6; j++){
+
+						rect = cv::Rect(j*img->cols / 6, i*img->rows / 6, img->cols / 6, img->rows / 6);
+						out = (*img)(rect);
+						grid[i][j] = average_of_Mat(&out);
+						//	cout << grid[i][j] << " ";
+					}
+					//cout << endl;
+				}
+				disp_image(img, "");
+				if (is_marker(grid)){
+					disp_image(img, "");
+					return ar_to_price(grid);
+				}
+				else{
+					rot_90(im);
+					for (int i = 0; i < 6; i++){
+						for (int j = 0; j < 6; j++){
+
+							rect = cv::Rect(j*img->cols / 6, i*img->rows / 6, img->cols / 6, img->rows / 6);
+							out = (*img)(rect);
+							grid[i][j] = average_of_Mat(&out);
+							//	cout << grid[i][j] << " ";
+						}
+						//cout << endl;
+					}
+					disp_image(img, "");
+					if (is_marker(grid)){
+						disp_image(img, "");
+						return ar_to_price(grid);
+					}
+
+				}
+
+			}
+
+		}
+	}
 	std::cout << "こいつはマーカではなさそう" << std::endl;
 	return 0;
 }
+
+
+/*--------------------------------------------------
+処理:マーカを見っけて合計の値段を調べ理
+戻り値: 合計の値段
+引数:   nasi 
+--------------------------------------------------*/
 int find_marker_and_get_price(){
 
 	int result = 0;
-	cv::Mat img = cv::imread("marker/test3.bmp");
+	cv::Mat img = cv::imread("coin_test7.png"/*"marker/AR264.png"*/,1);
+	disp_image(&img, "");
 	//get_image_2(&img);
-	cv::Mat image_source = img;
-	disp_image(&img, "");
-	cv::waitKey();
-
-
-	to_gray(&img);
-	cv::threshold(img, img, 0, 255, CV_THRESH_BINARY | CV_THRESH_OTSU);
-	disp_image(&img, "");
-	cv::waitKey();
-
 	
+	to_gray(&img);
+	cv::Mat image_source;
 	disp_image(&img, "");
-	cv::waitKey();
+
+
+	cv::threshold(img, img, 0, 255, CV_THRESH_BINARY | CV_THRESH_OTSU);
+	copy_image(&img, &image_source);
 	// 変換後の画像での座標
 	const cv::Point2f dst_pt[] = {
 		cv::Point2f(0, 0),
-		cv::Point2f(505, 0),
-		cv::Point2f(0, 505),
-		cv::Point2f(505, 505)
+		cv::Point2f(300, 0),
+		cv::Point2f(0, 300),
+		cv::Point2f(300, 300)
 	};
-	cv::Rect roi(cv::Point(2, 2), cv::Size(502, 502));
+
+	cv::Rect roi(cv::Point(0, 0), cv::Size(300, 300));
 
 
 	std::map<int, double> result_of_match;
 
-
 	disp_image(&image_source, "");
-	cv::waitKey();
 	std::vector<std::vector<cv::Point>> contours;
 	std::vector<cv::Vec4i> hierarchy;
 	cv::findContours(img, contours, hierarchy, cv::RETR_EXTERNAL, cv::CHAIN_APPROX_TC89_L1);
 	cv::Mat tmp;
+
 	int max_level = 0;
 	for (int i = 0; i < contours.size(); i++) {
 		// ある程度の面積が有るものだけに絞る
 		double a = contourArea(contours[i], false);
-		if (a > 500) {
+		if (a > 200) {
 			//輪郭を直線近似する
 			std::vector<cv::Point> approx;
-			cv::approxPolyDP(cv::Mat(contours[i]), approx, 0.1 * cv::arcLength(contours[i], true), true);
+			cv::approxPolyDP(cv::Mat(contours[i]), approx, 0.05 * cv::arcLength(contours[i], true), true);
 			// 矩形のみ取得
-			std::cout << approx.size() << std::endl;
+		//	std::cout << approx.size() << std::endl;
 			if (approx.size() == 4) {
 				cv::Point2f src_pt[4];
 				src_pt[0] = approx[0];
@@ -1996,21 +2211,27 @@ int find_marker_and_get_price(){
 				cv::warpPerspective(image_source, tmp, homography_matrix, image_source.size());
 				tmp = tmp(roi);
 				disp_image(&tmp, "");
-				cv::waitKey();
 				int tmp_price = ar_read(&tmp);
 				std::cout << tmp_price << std::endl;
+				cash_disp->add_total_price(tmp_price);
 				result += tmp_price;
 			}
 		}
 	}
-
+	disp_image(&image_source, "");
 	return result;
 }
+
+/*--------------------------------------------------
+処理:	ar_read用の関数，数値化の処理の一部のラッピング
+戻り値: マーカ価格
+引数:   平均値grid
+--------------------------------------------------*/
 int ar_to_price(vector<vector<double>> grid_double){
 	/*
 	□ □ □ □ □ □
 	□ ■ □  1 ■ □
-	□ □  2 □  4 □
+	□ ■ 2  □  4 □
 	□ 8  16 32 64 □
 	□ ■128 256□ □
 	□ □ □ □ □ □
@@ -2030,8 +2251,20 @@ int ar_to_price(vector<vector<double>> grid_double){
 	return result;
 
 }
+
+
+/*--------------------------------------------------
+処理:   マーカか判定
+戻り値: true or false
+引数:   平均値grid
+--------------------------------------------------*/
 bool is_marker(vector<vector<double>> grid){
-	if (grid[1][1]<80 && grid[4][1]<80 && grid[1][4]<80 && grid[2][1]>180 && grid[2][3]>180 && grid[1][2]>180 && grid[4][4]>180){
+	/*std::cout << grid[1][1] << " " << grid[4][1] << " " << grid[1][4] << " "
+		<< grid[2][1] << " " << grid[2][3] << " " <<
+		grid[1][2] << " " << grid[4][4] << std::endl;
+	*/
+	if (grid[1][1]<140 && grid[4][1]<140 && grid[1][4]<140 && grid[2][1]<140 && grid[2][3]>180 && grid[1][2]>180 && grid[4][4]>180){
+
 		return true;
 	}
 	else{
@@ -2039,6 +2272,12 @@ bool is_marker(vector<vector<double>> grid){
 	}
 
 }
+
+/*--------------------------------------------------
+処理:	画像の平均値取得
+戻り値: 平均double 
+引数:   画像img
+--------------------------------------------------*/
 double average_of_Mat(cv::Mat *img){
 	double result = 0, img_size = img->rows*img->cols;
 	for (int i = 0; i < img->rows; i++){
