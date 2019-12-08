@@ -20,6 +20,7 @@
 #define IMG_XSIZE 640
 #define IMG_YSIZE 
 #define LABEL_THD 220
+#define MAX_OBJ 512
 /**************************************************/
 
 
@@ -34,6 +35,16 @@ extern BYTE *img_work2;
 extern BYTE *img_work3;
 /**************************************************/
 
+struct coin_list{//コインの個数リストの構造体
+	cv::Point coin_point;
+	double hit_1 = 0;
+	double hit_5 = 0;
+	double hit_10 = 0;
+	double hit_50 = 0;
+	double hit_100 = 0;
+	double hit_500 = 0;
+	int value = 0;
+};
 
 
 /***************************************************
@@ -70,8 +81,16 @@ void get_coin(BYTE img, int coin[6], std::string mode);//コインを判別し�
 int get_size(BYTE *img, int label);//与えられたラベル番号の面積を返す関数
 double get_sat(BYTE *img, BYTE *img_hsv, int label);//与えられたラベル番号の彩度を返す関数
 double get_val(BYTE *img, BYTE *img_hsv, int label);//与えられたラベル番号の明度を返す関数
-BYTE get_sep_area(BYTE* img);//境界で切り出した画像を返す関数
+double get_hue(BYTE *img, BYTE *img_hsv, int label);//与えられたラベル番号の色彩を返す関数
+BYTE get_sep_area(BYTE* img);//境界で切り出した画像を返す関数(未完了)
 void warpPers(BYTE *img);
+void compress_img(BYTE *img, BYTE *img_dst);//グレー画像の白い部分強調処理
+void filtering(cv::Mat img, cv::Mat img_sample, cv::Mat img_dst);//フィルタリングで画像検出
+
+int get_coin_enhanced(cv::Mat img, coin_list result_list[MAX_OBJ], cv::Point offset, int template_num);//貨幣のリストを作る
+int match_coin(cv::Mat img, cv::Mat img_temp, cv::Point* result_list, double* score, double thd);//テンプレートマッチングをかける
+cv::Point cut_image(cv::Mat img, cv::Mat* img_dst);//イメージを切り出す
+int how_match(cv::Mat img);//移っている貨幣の総額を返す 最終的にこれを呼べばOK
 
 void get_side_of_tray(cv::Mat image, int label, double *x, double *y);
 double get_direction_2(BYTE *img, int label, double* theta);//方向を取得する関数,傾きをついでにreturn
@@ -84,6 +103,7 @@ int find_marker_and_get_price();//ARマーカ風のオブジェクトで値段�
 double average_of_Mat(cv::Mat *img);//白黒画像の平均を取る
 int ar_read(cv::Mat *img);//ARの切り抜き画像を読んで数値化
 bool is_marker(vector<vector<double>> grid);//マーカーか判断
+cv::Mat labeL_num_extraction(cv::Mat *labeled, int label_num);//指定ラベル番号のみのこった二値化画像を抽出
 int ar_to_price(vector<vector<double>> grid_double);//ar_read()の内部で数値化に使う
 /*連携部分*/
 void exchange_ctor(double cx, double cy, double* rx, double* ry);//画像座標系からロボット座標系に変換
@@ -99,7 +119,7 @@ std::map<long long int, long long int> accounting(long long int received, long l
 class Cashregister_display{
 public:
 	Cashregister_display(){
-		std::cout << "unko" << std::endl;
+		//std::cout << "unko" << std::endl;
 		display_image = cv::Mat::zeros(500, 800, CV_8UC3);
 
 		received = -1;
@@ -171,42 +191,54 @@ Cashregister_display *cash_disp;
 mainfunc: メイン処理（実際の処理を記述）
 ***************************************************/
 void mainfunc(HDC *hDC) {
-
 	//カメラの解像度設定，必須
 	cap.set(CV_CAP_PROP_FRAME_WIDTH, 1280);
 	cap.set(CV_CAP_PROP_FRAME_HEIGHT, 960);
 
 	//レジ画面の実体化
 	cash_disp = new Cashregister_display();
+	
+	//ユーザーが品物を置いてエンターキーを押すのを待つ
 	cv::waitKey();
+
+	//価格の認識 , 価格の表示
+	int kakaku = find_marker_and_get_price();
 	/*
-	cv::Mat img=	cv::imread("sozai.png",0);
-	
-	cv::threshold(img, img, 0, 255, CV_THRESH_BINARY | CV_THRESH_OTSU);
-	
-	disp_image(&img, "");
+	//ユーザーがトレーに代金を置いてエンターキーを押すのを待つ
 	cv::waitKey();
-	
-	
-	cv::waitKey();
-	*/
 
-	std::cout << find_marker_and_get_price() << std::endl;
+	//貨幣総額の認識
+	//cv::Mat img = cv::imread("resorce/test/coin_test5.png");
+	cv::Mat img_payment;
+	bool loop_flg = FALSE;
+	do{
+		loop_flg = FALSE;
+		get_image_2(&img_payment);
+		get_image_2(&img_payment);
+		get_image_2(&img_payment);
+		if (img_payment.data == NULL){
+			printf("判定する画像の取得に失敗しました\n");
+			loop_flg = TRUE;
+		}
+	} while (loop_flg);
 
-	cv::waitKey();
-	cash_disp->set_received(20);
-	cv::waitKey();
-	cash_disp->set_received(200);
-	cv::waitKey();
-	cash_disp->set_change(200);
-	cv::waitKey();
-	/*
+	int payment = how_match(img_payment);
 
-	check_where_coin();
-	grip_and_shake_tray();
-	grip_tray_and_getcoin()
-	//grip_and_shake_tray();
-	*/
+	//品物を出す
+	//なんかいい感じの関数
+
+	//お釣りを出す
+	std::map<long long int, long long int> money = accounting(payment, kakaku);
+	return_change(money);//実動作
+
+	/*終了しないようにする関数*/
+	std::string hoge;
+	do
+	{
+		hoge = "";
+		std::cin >> hoge;
+	} while (hoge != "f");
+
 }
 /**************************************************/
 
@@ -224,6 +256,318 @@ void disp_image_while_kbhit(BYTE *img) {
 	return;				// 終了
 }
 /* 以下に自分で作成した関数の宣言を記述*/
+
+/*--------------------------------------------------
+処理:	画像から移っている貨幣の総額を返す関数
+戻り値: 見つけた貨幣の数
+引数:   入力画像<img>
+
+備考:H10/temp/ にテンプレート画像を入れておく必要がある
+--------------------------------------------------*/
+int how_match(cv::Mat img){
+	cv::Mat img_disp;
+	img.copyTo(img_disp);
+	cv::Mat img_cut;
+	cv::Point pos_cut;
+	pos_cut = cut_image(img, &img_cut);
+	if (pos_cut == cv::Point(0, 0)) img_cut = img;
+	coin_list result_list[MAX_OBJ];
+	//disp_image(&img, "");
+	//wait_while_kbhit();
+	int use_template_num = 10;
+	int total_value = 0;
+
+	int coin_maisu = get_coin_enhanced(img_cut, result_list, pos_cut, use_template_num);
+
+	for (int i = 0; i < coin_maisu; i++){
+
+		/*コイン判定 孔を検出 検出点を重心とする5*5の矩形を参照する*/
+		cv::Mat rect_img;
+		cv::Point top(result_list[i].coin_point.x - 7, result_list[i].coin_point.y - 7);
+		cv::Rect cut_rect(top, cv::Size(15, 15));
+		rect_img = img(cut_rect);
+		cv::cvtColor(rect_img, rect_img, CV_BGR2HSV);
+		int max_sat = -1;
+		int min_sat = 256;
+		int sum_val = 0;
+
+		for (int x = 0; x < rect_img.cols; x++){
+			for (int y = 0; y < rect_img.rows; y++){
+				if (max_sat < rgb((&rect_img), y, x, 1)) max_sat = rgb((&rect_img), y, x, 1);//取り急ぎbgr関数でアクセス
+				if (min_sat > rgb((&rect_img), y, x, 1)) min_sat = rgb((&rect_img), y, x, 1);//取り急ぎbgr関数でアクセス
+				sum_val += rgb((&rect_img), y, x, 2);//取り急ぎbgr関数でアクセス
+			}
+		}
+		sum_val /= 255;
+		bool hole_flg = FALSE;
+		if ((max_sat - min_sat) > 75) hole_flg = TRUE;
+
+		/*貨幣分類開始*/
+		/*有孔貨幣*/
+		if (hole_flg == TRUE){
+			if (result_list[i].hit_5 + result_list[i].hit_10 > result_list[i].hit_50 + result_list[i].hit_100){//5円玉
+				result_list[i].value = 5;
+			}
+			else{//50円玉
+				result_list[i].value = 50;
+			}
+		}
+		else{/*孔のない貨幣  どうしようね*/
+
+			if (result_list[i].hit_500 > use_template_num / 3 * 2){
+				result_list[i].value = 500;
+			}
+			else if (result_list[i].hit_5 + result_list[i].hit_10 > result_list[i].hit_50 + result_list[i].hit_100 && max_sat > 50){
+				result_list[i].value = 10;
+			}
+
+			else{//100円玉，1円玉区別
+				cv::Mat rect_img_100en;
+				cv::Point top(result_list[i].coin_point.x - 15, result_list[i].coin_point.y - 15);
+				cv::Rect cut_rect(top, cv::Size(30, 30));
+				rect_img_100en = img(cut_rect);
+				cv::cvtColor(rect_img_100en, rect_img_100en, CV_BGR2HSV);
+				int max_sat = -1;
+				int min_sat = 256;
+				int min_val = 999;
+
+				for (int x = 0; x < rect_img_100en.cols; x++){
+					for (int y = 0; y < rect_img_100en.rows; y++){
+						if (min_val > rgb((&rect_img_100en), y, x, 2)) min_val = rgb((&rect_img_100en), y, x, 2);//取り急ぎbgr関数でアクセス
+					}
+				}
+
+
+				if (result_list[i].hit_1 > result_list[i].hit_100){//分類できねええええええ
+					result_list[i].value = 1;
+				}
+				else{
+					result_list[i].value = 100;
+				}
+			}
+
+		}
+		int x = result_list[i].coin_point.x;
+		int y = result_list[i].coin_point.y;
+		printf("(%d,%d): num = %d\n", x, y, i + 1);
+		printf("\t1円玉:\t\t%1.0lf\n", result_list[i].hit_1);
+		printf("\t5円玉:\t\t%1.0lf\n", result_list[i].hit_5);
+		printf("\t10円玉:\t\t%1.0lf\n", result_list[i].hit_10);
+		printf("\t50円玉:\t\t%1.0lf\n", result_list[i].hit_50);
+		printf("\t100円玉:\t%1.0lf\n", result_list[i].hit_100);
+		printf("\t500円玉:\t%1.0lf\n", result_list[i].hit_500);
+		printf("\tvalue = %d\n", result_list[i].value);
+		printf("sat_range = %d\n", max_sat - min_sat);
+		printf("sat = %d\n", max_sat);
+		printf("ava_value = %d\n", sum_val);
+		printf("\n");
+
+		cv::putText(img_disp, std::to_string(i)+ "-" + std::to_string(result_list[i].value), result_list[i].coin_point - cv::Point(35, 0), 2, 1, cv::Scalar(0, 255, 0));
+		//if (i < 8){
+		//	cv::line(img_disp, result_list[i].coin_point, cv::Point(200, 100 + 1100 * i / coin_maisu), cv::Scalar(int(255 * i / coin_maisu), 255 - int(255 * i / coin_maisu), 0), 1);
+		//	cv::putText(img_disp, std::to_string(result_list[i].value), cv::Point(120, 100 + 1100 * i / coin_maisu), 2, 2, cv::Scalar(0, 255, 0));
+		//}
+		//else{
+		//	cv::line(img_disp, result_list[i].coin_point, cv::Point(1100, 100 + 1100 * (i - 7) / coin_maisu), cv::Scalar(int(255 * i / coin_maisu), 255 - int(255 * i / coin_maisu), 0), 1);
+		//	cv::putText(img_disp, std::to_string(result_list[i].value), cv::Point(1150, 100 + 1100 * (i - 7) / coin_maisu), 2, 2, cv::Scalar(0, 255, 0));
+		//}
+
+		total_value += result_list[i].value;
+
+	}
+
+	return total_value;
+}
+/*--------------------------------------------------
+処理:	画像から貨幣のパターンマッチングを返す関数
+戻り値: 見つけた貨幣の数
+引数:   入力画像<img>, 個数リスト格納用変数<int*>
+--------------------------------------------------*/
+int get_coin_enhanced(cv::Mat img, coin_list result_list[MAX_OBJ],cv::Point offset,int template_num){
+	const int coin_size = 15;//コインのサイズ，同様のコインとみなすノルムの閾値
+	const double thd = 0.5;//明らかな非コインの閾値
+	const std::string coin_list[6] = { "1", "5", "10", "50", "100", "500" };//fileopenに使用
+	const int use_temp_num = template_num;//テンプレートの枚数
+	int progress = 0;
+	int progress_border = 0;
+
+	double score_buf[MAX_OBJ];//貨幣の適合度の仮置き変数
+	int count = 0;//現在見つけた貨幣の数
+
+	for (int coin_num = 0; coin_num < 6; coin_num++){//coin_num円玉について
+		std::string temp_path_1 = "temp/" + coin_list[coin_num] + "/";
+		std::string temp_path_2(".bmp");
+
+		for (int n = 1; n <= use_temp_num; n++){//n番目のテンプレートをつかって
+			int temp_num = 0;
+			std::string temp_path = temp_path_1 + std::to_string(n) + temp_path_2;//テンプレートへのパスを作成
+
+			cv::Mat img_temp = cv::imread(temp_path);//テンプレートを作成
+			if (img_temp.data == NULL) continue;
+			cv::Point pos_buf[MAX_OBJ];
+			temp_num = match_coin(img, img_temp, pos_buf, score_buf, 0.57);//テンプレートにマッチしたコインがある座標取得
+
+			/*result_Listへデータの格納*/
+			for (int i = 0; i < temp_num; i++){//tempで見つけた各座標が
+				/*物体として区別*/
+				bool check_flg = false;
+				int result_list_address = 0;
+				for (int j = 0; j < count; j++){//現在のcoinlistに存在するか
+					if (cv::norm(pos_buf[i] + offset - result_list[j].coin_point) < coin_size){//coinbufとcoinlistの座標比較，近接していれば
+						check_flg = true;
+						result_list_address = j;
+					}
+				}
+				if (check_flg == false){//未発見のコインであれば
+					result_list_address = count;
+					result_list[result_list_address].coin_point = pos_buf[i] + offset;
+					count++;
+				}
+				/*result_list書き換え*/
+				switch (coin_num){
+				case 0:
+					result_list[result_list_address].hit_1 += 1;
+					break;
+				case 1:
+					result_list[result_list_address].hit_5 += 1;
+					break;
+				case 2:
+					result_list[result_list_address].hit_10 += 1;
+					break;
+				case 3:
+					result_list[result_list_address].hit_50 += 1;
+					break;
+				case 4:
+					result_list[result_list_address].hit_100 += 1;
+					break;
+				case 5:
+					result_list[result_list_address].hit_500 += 1;
+					break;
+				}
+
+
+			}
+			progress += 1;
+			if (progress_border < float(progress * 100 / (6 * use_temp_num))){
+				printf("受け取り額を計算していますよ   %1.0f ％ ...", float(progress * 100 / (6 * use_temp_num)));
+				//printf("   using: %d-%d  hit:%d",coin_num, n, temp_num);
+				printf("\n");
+				progress_border += 10;
+			}
+		}
+	}
+	//printf("探索が終了しました\n");
+
+	return count;
+}
+
+/*--------------------------------------------------
+処理:	元画像とテンプレートから貨幣の位置のリスト返す関数
+戻り値: そのテンプレートで見つけたコインの数
+引数:   入力画像<img>,テンプレート画像<img_temp>, 貨幣の位置リスト<result_list>, 適合度<score> スレッショルド<thd>
+--------------------------------------------------*/
+int match_coin(cv::Mat img_source, cv::Mat img_temp, cv::Point* result_list, double* score, double thd){
+	cv::Mat result;
+	cv::Mat img;
+	img_source.copyTo(img);
+	int count = 0;
+	//disp_image(&img_source, "");
+	for (int i = 0; i < 30; i++){//i番目のオブジェクト探索
+		// テンプレートマッチング
+		cv::matchTemplate(img, img_temp, result, CV_TM_CCOEFF_NORMED);
+
+		// 最大のスコアの場所を探す
+		cv::Point max_pos;
+		max_pos.x = 0;
+		max_pos.y = 0;
+		double max_val = 0;
+		cv::minMaxLoc(result, NULL, &max_val, NULL, &max_pos);
+
+		// 一定スコア以下の場合は処理終了
+		if (max_val < thd) break;
+
+		//元画像にマスク
+		cv::Rect result_rect(0, 0, img_temp.cols - 18, img_temp.rows - 18);
+		result_rect.x = max_pos.x + 10;
+		result_rect.y = max_pos.y + 10;
+		cv::rectangle(img, result_rect, cv::Scalar(0, 255, 0), -1);
+		//std::cout << "(" << max_pos.x << ", " << max_pos.y << "), score=" << max_val << std::endl;
+		//disp_image(&img, "");
+		//wait_while_kbhit();
+
+
+		// 結果として格納
+		max_pos.x += img_temp.cols / 2;
+		max_pos.y += img_temp.rows / 2;
+		result_list[i] = max_pos;
+		score[i] = max_val;
+
+		
+
+		count++;
+	}
+
+	return count;
+}
+
+/*--------------------------------------------------
+処理:	画像をトレーの範囲をすべて含むように適当に切り出す
+戻り値: 切り取りの基準座標 cv::Point
+引数:   画像<img>，返り画像<img_dst>
+--------------------------------------------------*/
+cv::Point cut_image(cv::Mat img, cv::Mat* img_dst){
+	cv::Mat img_gray;
+	cv::Mat img_hsv;
+	img.copyTo(img_gray);
+	cv::cvtColor(img, img_hsv, CV_BGR2HSV);
+
+	to_gray(&img_gray);
+	cv::threshold(img_gray, img_gray, 0, 255, CV_THRESH_BINARY | CV_THRESH_OTSU);
+
+	erosion(&img_gray, 10);
+	dilation(&img_gray, 10);
+	dilation(&img_gray, 10);
+	erosion(&img_gray, 10);
+
+	cv::Mat img_labelled;
+	int label_count = labeling(&img_gray, &img_labelled);
+
+	//hue 50~80,val 60~110をひとまずトレーのボーダーとする
+	for (int i = 1; i <= label_count; i++){
+		double hue = get_hue(&img_labelled, &img_hsv, i);
+		double val = get_val(&img_labelled, &img_hsv, i);
+		int size = get_size(&img_labelled, i);
+		//printf("hue = %lf, val = %lf, size = %d\n", hue, val, size);
+
+		if (hue < 80 || hue > 110 || size < 160000 || size > 180000) continue;
+		
+		/*包含矩形取得*/
+		int max_y = -1;
+		int max_x = -1; 
+		int min_y = 9999;
+		int min_x = 9999;
+
+
+		for (int x = 0; x < img_labelled.cols; x++){
+			for (int y = 0; y < img_labelled.rows; y++){
+				if (gray((&img_labelled),y,x)==i){
+					if (max_y < y) max_y = y;
+					if (max_x < x) max_x = x;
+					if (min_y > y) min_y = y;
+					if (min_x > x) min_x = x;
+				}
+			}
+		}
+		cv::Point bottom(min_x, min_y);
+		cv::Point top(max_x, max_y);
+		cv::Rect cut_rect(bottom, top);
+		*img_dst = img(cut_rect);
+		return bottom;
+		break;
+	}
+	return cv::Point(0, 0);
+}
+
 
 /*--------------------------------------------------
 処理:	ホームポジションに移動する関数
@@ -601,13 +945,13 @@ void exchange_ctor(double cx, double cy, double* rx, double* ry){
 	/**rx = 1.0773 * cy - 188.77;
 	*ry = 1.1383 * cx - 324;
 	*/
-	
+
 	*rx = 0.4792*cy + 124.66;
 	*ry=0.3989*cx - 257.16;
 	
 	return;
 
-		}
+}
 
 
 /*--------------------------------------------------
@@ -738,13 +1082,13 @@ void do_zeroin_refined(){
 	}
 
 	printf("\n\n********<result X>*******\n");
-		for (int j = 0; j < 10; j++){
-			printf(" &lf , %lf \n", arm_pos[j][0], block_list[j][0]);
-		}
-		printf("\n\n********<result X>*******\n");
-		for (int j = 0; j < 10; j++){
-			printf(" &lf , %lf \n", arm_pos[j][1], block_list[j][1]);
-		}
+	for (int j = 0; j < 10; j++){
+		printf(" &lf , %lf \n", arm_pos[j][0], block_list[j][0]);
+	}
+	printf("\n\n********<result X>*******\n");
+	for (int j = 0; j < 10; j++){
+		printf(" &lf , %lf \n", arm_pos[j][1], block_list[j][1]);
+	}
 
 }
 
@@ -813,7 +1157,6 @@ void to_color(BYTE *img,BYTE* img_result, int thd_B, int thd_G, int thd_R){
 
 	cv::inRange(*img, s_min, s_max, color_only_img);
 	color_only_img.copyTo(*img_result);
-	
 
 	labeling(&color_only_img,&labeled_img);
 	disp_labeled_image(&labeled_img,"");
@@ -851,7 +1194,7 @@ void get_coin(BYTE img,int coin[6],std::string mode ){
 	}
 	img_cvt = ~img_cvt;
 
-	disp_image((&img_cvt), "");
+	//disp_image((&img_cvt), "");
 	wait_while_kbhit();
 
 
@@ -864,7 +1207,7 @@ void get_coin(BYTE img,int coin[6],std::string mode ){
 	int c_num = labeling(&img_cvt, &img_labelled);//ラベリング
 
 	/*確認用，もう使わないかな*/
-	disp_image((&img_cvt), "");
+	//disp_image((&img_cvt), "");
 	wait_while_kbhit();
 
 	disp_labeled_image(&img_labelled, "");
@@ -1024,6 +1367,28 @@ double get_val(BYTE *img, BYTE *img_hsv, int label){
 
 }
 
+/*--------------------------------------------------
+処理:	指定ラベルの色彩を求める関数
+返り値：double
+引数:   ラベル済み画像データ<img>,hsv画像データ<img_hsv>ラベル番号<label>
+--------------------------------------------------*/
+double get_hue(BYTE *img, BYTE *img_hsv, int label){
+	double hue = 0;
+
+	for (int x = 0; x < img->cols; x++){
+		for (int y = 0; y < img->rows; y++){
+			if (gray(img, y, x) == label) {
+				hue += rgb(img_hsv, y, x, 0);//取り急ぎbgr関数でアクセス
+			}
+		}
+	}
+
+	hue = hue / get_size(img, label);//hueの平均をとる
+
+	return hue;
+
+}
+
 
 /*--------------------------------------------------
 処理:	画像を真上から撮ったように変形する
@@ -1047,7 +1412,21 @@ void warpPers(BYTE *img){
 		cv::Point2f(0, 960),
 		cv::Point2f(1280, 960)
 	};
-	
+
+	/*640 480
+	// 変換前の画像での座標
+	const cv::Point2f src_pt[] = {
+	cv::Point2f(65, 0),
+	cv::Point2f(595, 0),
+	cv::Point2f(0, 480),
+	cv::Point2f(640, 480) };
+	// 変換後の画像での座標
+	const cv::Point2f dst_pt[] = {
+	cv::Point2f(0, 0),
+	cv::Point2f(640, 0),
+	cv::Point2f(0, 480),
+	cv::Point2f(640, 480)
+	};*/
 
 	//変換行列の計算
 	const cv::Mat homography_matrix = cv::getPerspectiveTransform(src_pt, dst_pt);
@@ -1058,6 +1437,9 @@ void warpPers(BYTE *img){
 
 	cv::warpPerspective(*img, *img, homography_matrix, img->size());
 
+	//このとき，
+	//robotX = 0.8088*imageY + 161.89, robotY = 0.6933*imageX - 222.32,
+	//これがこの画像の変形を使った場合の座標変換になります  
 }
 
 
@@ -1275,6 +1657,7 @@ void grip_and_shake_tray(){
 
 }
 
+
 /*--------------------------------------------------
 処理:トレイの横の座標を取得，受け取ったお金を回収
 返り値：なし
@@ -1290,10 +1673,10 @@ void grip_tray_and_getcoin(){
 	//image = cv::imread("sozai/sozai1.png");
 	to_gray(&image);
 	cv::threshold(image, image, 0, 255, CV_THRESH_BINARY | CV_THRESH_OTSU);
-	/*
-	erosion(&image, 3);
-	dilation(&image, 3);
-	*/
+	
+	erosion(&image, 2);
+	dilation(&image, 4);
+	erosion(&image, 2);
 	cv::Mat lab;
 	int label_num = labeling(&image, &lab);
 	disp_labeled_image(&lab, "画像処理表示");
@@ -1420,10 +1803,10 @@ void grip_tray_and_getcoin(){
 		rsputs("GP 63,63,3");
 		wait_done();
 		
-		m_move_position_2(160, 160, 250, 0, 140);
-		m_move_straight(160, 160, 250, -70, 130);
+		m_move_position_2(70, 70, 500, 30, 140);
+		m_move_straight(70, 70, 500, -140, 130);
 		
-		m_move_straight(160, 160, 250, 0, 140);
+		m_move_position_2(70, 70, 500, 0, 140);
 		m_move_position_2(280, 0, 200, 0, 140);
 		ungrip();
 		m_move_position_2(310, 0, 210, 0, 160);
@@ -1611,7 +1994,7 @@ int find_marker_and_get_price_prototype(){
 	
 	
 	
-	disp_image(&img, "");
+	//disp_image(&img, "");
 	cv::waitKey();
 
 	
@@ -1690,7 +2073,7 @@ int find_marker_and_get_price_prototype(){
 
 			cv::warpPerspective(img, tmp, homography_matrix, img.size());
 			tmp = tmp(roi);
-			disp_image(&tmp,"");
+			//disp_image(&tmp,"");
 			for (auto &y : result_of_match){
 
 				y.second = 0;
@@ -1700,7 +2083,7 @@ int find_marker_and_get_price_prototype(){
 			
 
 				std::cout << "価格 "<<x.first << std::endl;
-				disp_image(&tmp, "");
+				//disp_image(&tmp, "");
 				//cv::waitKey();
 				cv::matchTemplate(tmp, x.second, match_result_mat, CV_TM_SQDIFF);
 				cv::Point max_pt;
@@ -1724,7 +2107,7 @@ int find_marker_and_get_price_prototype(){
 
 				}std::cout << std::endl;
 				rot_90(tmp);
-				disp_image(&tmp, "");
+				//disp_image(&tmp, "");
 				//cv::waitKey();
 				cv::matchTemplate(tmp, x.second, match_result_mat, 3);
 				cv::minMaxLoc(match_result_mat, NULL, &maxVal, NULL, &max_pt);
@@ -1734,7 +2117,7 @@ int find_marker_and_get_price_prototype(){
 
 				}std::cout << std::endl;
 				rot_90(tmp);
-				disp_image(&tmp, "");
+				//disp_image(&tmp, "");
 				cv::waitKey();
 				cv::matchTemplate(tmp, x.second, match_result_mat, 3);
 				cv::minMaxLoc(match_result_mat, NULL, &maxVal, NULL, &max_pt);
@@ -1767,7 +2150,7 @@ int find_marker_and_get_price_prototype(){
 		}
 		else{
 
-			std::cout << "こいつはマーカではなさそう..." << std::endl;
+			//std::cout << "こいつはマーカではなさそう..." << std::endl;
 		
 		}
 
@@ -1800,73 +2183,84 @@ void rot_90(cv::Mat &img){
 
 
 
+
 /*--------------------------------------------------
 処理:	事前準備用:おつり用硬貨の場所を決めるための関数，アームが移動してくのでそこに硬貨を置く
 返り値:なし
 引数:   なし
 --------------------------------------------------*/
 void check_where_coin(){
-	speed_change(13);
-	m_move_straight(160, 160, 250.7, 0, 180);
+	speed_change(22);
+	m_ungrip();
+	m_move_position_2(162, 148, 248.2, 0, 180);
 	getchar();
 	m_grip();
 	getchar();
 	m_ungrip();
-	m_move_straight(160, 160, 250.7, 90, 180);
+	m_move_position_2(162, 148, 248.2, 90, 180);
+	getchar();
+	m_grip();
+	getchar();
+	m_ungrip();
+	m_home();
+	m_move_position_2(162, 208, 248.2, 0, 180);
+	getchar();
+	m_grip();
+	getchar();
+	m_ungrip();
+	m_move_position_2(162, 208, 248.2, 90, 180);
 	getchar();
 	m_grip();
 	getchar();
 	m_ungrip();
 	m_home();
-	m_move_straight(160, 220, 250.7, 0, 180);
+	m_move_position_2(222, 148, 248.2, 0, 180);
+	getchar();
 	m_grip();
 	getchar();
 	m_ungrip();
-	m_move_straight(160, 220, 250.7, 90, 180);
-	m_grip();
+	m_move_position_2(222, 148, 248.2, 90, 180);
 	getchar();
-	m_ungrip();
-	m_home();
-	m_move_straight(220, 160, 250.7, 0, 180);
-	m_grip();
-	getchar();
-	m_ungrip();
-	m_move_straight(220, 160, 250.7, 90, 180);
 	m_grip();
 	getchar();
 	m_ungrip();
 	m_home();
-	m_move_straight(220, 220, 250.7, 0, 180);
+	m_move_position_2(222, 208, 248.2, 0, 180);
+	getchar();
 	m_grip();
 	getchar();
 	m_ungrip();
-	m_move_straight(220, 220, 250.7, 90, 180);
+	m_move_position_2(222, 208, 248.2, 90, 180);
+	getchar();
 	m_grip();
 	getchar();
 	m_ungrip();
 	m_home();
-	m_move_straight(280, 160, 250.7, 0, 180);
-	m_home();
-	m_grip();
+	m_move_position_2(282, 148, 247.9, 0, 180);
 	getchar();
-	m_move_straight(280, 160, 250.7, 90, 180);
-	m_home();
 	m_grip();
 	getchar();
 	m_ungrip();
-	m_move_straight(280, 220, 250.7, 0, 180);
-	m_home();
-	m_grip();
+	m_move_position_2(282, 148, 247.9, 90, 180);
 	getchar();
-	m_move_straight(280, 220, 250.7, 90, 180);
-	m_home();
 	m_grip();
 	getchar();
 	m_ungrip();
+	m_home();
+	m_move_position_2(282, 208, 247.9, 0, 180);
+	getchar();
+	m_grip();
+	getchar();
+	m_ungrip();
+	m_move_position_2(282, 208, 247.9, 90, 180);
+	getchar();
+	m_grip();
+	getchar();
+	m_ungrip();
+	m_home();
 
 
 }
-
 
 /*--------------------------------------------------
 処理:	お釣りをトレイに乗せる
@@ -1998,7 +2392,7 @@ int ar_read(cv::Mat *image){
 		}
 		//cout << endl;
 	}if (is_marker(grid)){
-		disp_image(img, "");
+		//disp_image(img, "");
 		cv::waitKey();
 		return ar_to_price(grid);
 	}
@@ -2014,7 +2408,7 @@ int ar_read(cv::Mat *image){
 			}
 		//	cout << endl;
 		}if (is_marker(grid)){
-			disp_image(img, "");
+			//disp_image(img, "");
 			cv::waitKey();
 			return ar_to_price(grid);
 		}
@@ -2030,7 +2424,7 @@ int ar_read(cv::Mat *image){
 				}
 			//	cout << endl;
 			}if (is_marker(grid)){
-				disp_image(img, "");
+				//disp_image(img, "");
 				cv::waitKey();
 				return ar_to_price(grid);
 			}
@@ -2046,7 +2440,7 @@ int ar_read(cv::Mat *image){
 					}
 					//cout << endl;
 				}if (is_marker(grid)){
-					disp_image(img, "");
+					//disp_image(img, "");
 					cv::waitKey();
 					return ar_to_price(grid);
 				}
@@ -2056,7 +2450,7 @@ int ar_read(cv::Mat *image){
 		}
 	}
 	cv::flip(im, im, 0);
-	disp_image(img, "");
+	//disp_image(img, "");
 	for (int i = 0; i < 6; i++){
 		for (int j = 0; j < 6; j++){
 
@@ -2067,9 +2461,9 @@ int ar_read(cv::Mat *image){
 		}
 		//cout << endl;
 	}
-	disp_image(image, "");
+	//disp_image(image, "");
 	if (is_marker(grid)){
-		disp_image(img, "");
+		//disp_image(img, "");
 		return ar_to_price(grid);
 	}
 	else{
@@ -2084,9 +2478,9 @@ int ar_read(cv::Mat *image){
 			}
 			//	cout << endl;
 		}
-		disp_image(img, "");
+		//disp_image(img, "");
 		if (is_marker(grid)){
-			disp_image(image, "");
+			//disp_image(image, "");
 			return ar_to_price(grid);
 		}
 		else{
@@ -2102,9 +2496,9 @@ int ar_read(cv::Mat *image){
 				//	cout << endl;
 			}
 			
-			disp_image(img, "");
+			//disp_image(img, "");
 			if (is_marker(grid)){
-				disp_image(image, "");
+				//disp_image(image, "");
 				return ar_to_price(grid);
 			}
 			else{
@@ -2119,9 +2513,9 @@ int ar_read(cv::Mat *image){
 					}
 					//cout << endl;
 				}
-				disp_image(img, "");
+				//disp_image(img, "");
 				if (is_marker(grid)){
-					disp_image(img, "");
+					//disp_image(img, "");
 					return ar_to_price(grid);
 				}
 				else{
@@ -2136,9 +2530,9 @@ int ar_read(cv::Mat *image){
 						}
 						//cout << endl;
 					}
-					disp_image(img, "");
+					//disp_image(img, "");
 					if (is_marker(grid)){
-						disp_image(img, "");
+						//disp_image(img, "");
 						return ar_to_price(grid);
 					}
 
@@ -2148,7 +2542,7 @@ int ar_read(cv::Mat *image){
 
 		}
 	}
-	std::cout << "こいつはマーカではなさそう" << std::endl;
+	//std::cout << "こいつはマーカではなさそう" << std::endl;
 	return 0;
 }
 
@@ -2161,16 +2555,36 @@ int ar_read(cv::Mat *image){
 int find_marker_and_get_price(){
 
 	int result = 0;
-	cv::Mat img = cv::imread("coin_test7.png"/*"marker/AR264.png"*/,1);
-	disp_image(&img, "");
+	//cv::Mat img
+
+
 	//get_image_2(&img);
-	
+
+	bool loop_flg;
+	cv::Mat img = cv::imread("coin_test9.png"/*"marker/AR264.png"*/,1);
+	/*
+	do{
+		loop_flg = FALSE;
+		get_image_2(&img);
+		get_image_2(&img);
+		get_image_2(&img);
+		if (img.data == NULL){
+			printf("判定する画像の取得に失敗しました\n");
+			loop_flg = TRUE;
+		}
+	} while (loop_flg);
+	*/
+		//disp_image(&img, "");
 	to_gray(&img);
 	cv::Mat image_source;
-	disp_image(&img, "");
+	//disp_image(&img, "");
 
 
 	cv::threshold(img, img, 0, 255, CV_THRESH_BINARY | CV_THRESH_OTSU);
+	cv::Mat labeled_image;
+	int label_num = labeling(&img, &labeled_image);
+	//disp_labeled_image(&labeled_image, "");
+
 	copy_image(&img, &image_source);
 	// 変換後の画像での座標
 	const cv::Point2f dst_pt[] = {
@@ -2185,40 +2599,48 @@ int find_marker_and_get_price(){
 
 	std::map<int, double> result_of_match;
 
-	disp_image(&image_source, "");
+	//disp_image(&image_source, "");
 	std::vector<std::vector<cv::Point>> contours;
 	std::vector<cv::Vec4i> hierarchy;
-	cv::findContours(img, contours, hierarchy, cv::RETR_EXTERNAL, cv::CHAIN_APPROX_TC89_L1);
-	cv::Mat tmp;
+	cv::Mat tmp,label_i_image;
+	
+	for (int label_i = 1; label_i <= label_num; label_i++){
+		int max_level = 0;
+		label_i_image = labeL_num_extraction(&labeled_image, label_i);
+		//disp_image(&label_i_image, "");
+		//cv::waitKey();
+	  	cv::findContours(label_i_image, contours, hierarchy, cv::RETR_EXTERNAL, cv::CHAIN_APPROX_TC89_L1);
 
-	int max_level = 0;
-	for (int i = 0; i < contours.size(); i++) {
-		// ある程度の面積が有るものだけに絞る
-		double a = contourArea(contours[i], false);
-		if (a > 200) {
-			//輪郭を直線近似する
-			std::vector<cv::Point> approx;
-			cv::approxPolyDP(cv::Mat(contours[i]), approx, 0.05 * cv::arcLength(contours[i], true), true);
-			// 矩形のみ取得
-		//	std::cout << approx.size() << std::endl;
-			if (approx.size() == 4) {
-				cv::Point2f src_pt[4];
-				src_pt[0] = approx[0];
-				src_pt[1] = approx[1];
-				src_pt[2] = approx[3];
-				src_pt[3] = approx[2];
-				const cv::Mat homography_matrix = cv::getPerspectiveTransform(src_pt, dst_pt);
-				cv::warpPerspective(image_source, tmp, homography_matrix, image_source.size());
-				tmp = tmp(roi);
-				disp_image(&tmp, "");
-				int tmp_price = ar_read(&tmp);
-				std::cout << tmp_price << std::endl;
-				cash_disp->add_total_price(tmp_price);
-				result += tmp_price;
+
+		
+		for (int i = 0; i < contours.size(); i++) {
+			// ある程度の面積が有るものだけに絞る
+			double a = contourArea(contours[i], false);
+			if (a > 200) {
+				//輪郭を直線近似する
+				std::vector<cv::Point> approx;
+				cv::approxPolyDP(cv::Mat(contours[i]), approx, 0.05 * cv::arcLength(contours[i], true), true);
+				// 矩形のみ取得
+			//	std::cout << approx.size() << std::endl;
+				if (approx.size() == 4) {
+					cv::Point2f src_pt[4];
+					src_pt[0] = approx[0];
+					src_pt[1] = approx[1];
+					src_pt[2] = approx[3];
+					src_pt[3] = approx[2];
+					const cv::Mat homography_matrix = cv::getPerspectiveTransform(src_pt, dst_pt);
+					cv::warpPerspective(image_source, tmp, homography_matrix, image_source.size());
+					tmp = tmp(roi);
+					//disp_image(&tmp, "");
+					int tmp_price = ar_read(&tmp);
+					//std::cout << tmp_price << std::endl;
+					cash_disp->add_total_price(tmp_price);
+					result += tmp_price;
+				}
 			}
 		}
 	}
-	disp_image(&image_source, "");
+	//disp_image(&image_source, "");
 	return result;
 }
 
@@ -2286,4 +2708,127 @@ double average_of_Mat(cv::Mat *img){
 		}
 	}
 	return result;
+}
+
+
+/*--------------------------------------------------
+処理:	画像の正規化，圧縮を行う関数（圧縮部分は未実装，必要になったら作る）
+返り値：なし
+引数:   元画像<img>, 変更後画像<img_dst> (同じポインタでも動くよ)
+--------------------------------------------------*/
+void compress_img(BYTE *img, BYTE *img_dst){
+	int gray_max = 0;
+	int gray_min = 10000;
+
+	/*最大値，最小値の取得*/
+	for (int rows = 0; rows < img->rows; rows++){
+		for (int cols = 0; cols < img->cols; cols++){
+			if (rgb(img, rows, cols, 0) > gray_max){
+				gray_max = rgb(img, rows, cols, 0);
+			}
+			if (rgb(img, rows, cols, 0) < gray_min){
+				gray_min = rgb(img, rows, cols, 0);
+			}
+		}
+	}
+
+	/*正規化*/
+	for (int rows = 0; rows < img->rows; rows++){
+		for (int cols = 0; cols < img->cols; cols++){
+			int normalize = (rgb(img, rows, cols, 0) - gray_min) * 255 / gray_max - gray_min;
+			rgb(img_dst, rows, cols, 0) = normalize;
+			rgb(img_dst, rows, cols, 1) = normalize;
+			rgb(img_dst, rows, cols, 2) = normalize;
+		}
+	}
+}
+
+/*--------------------------------------------------
+処理:	フィルタリングから，サンプル画像との一致度分布を出す関数
+返り値：なし
+引数:   元画像<img>, サンプル画像<img_sample>, 出力画像<img_dst>
+--------------------------------------------------*/
+void filtering(cv::Mat img, cv::Mat img_sample, cv::Mat img_dst){
+	/*変数宣言*/
+	int img_y = img.rows;
+	int img_x = img.cols;
+	int sample_y = img.rows;
+	if (sample_y % 2 == 0) sample_y--;//奇数になるように
+	int sample_x = img.cols;
+	if (sample_x % 2 == 0) sample_x--;//奇数になるように
+	int img_size = img_x * img_y;
+	int sample_size = sample_x * sample_y;
+
+	int sample_center_y = (sample_y - 1) / 2;
+	int sample_center_x = (sample_x - 1) / 2;
+
+
+	/*画像下処理*/
+	cv::GaussianBlur(img_sample, img_sample, cv::Size(5, 5), 0, 0);
+	cv::cvtColor(img, img, CV_BGR2HSV);
+	cv::cvtColor(img_sample, img_sample, CV_BGR2HSV);
+
+	/*フィルタ開始*/
+	for (int rows = 0; rows < img_y; rows++){
+		for (int cols = 0; cols < img_x; cols++){
+			/*各画素に対して*/
+			double filtered = 0;//フィルタ値仮置き用変数
+			/*sampleでフィルタリング*/
+			for (int s_rows = 0; s_rows < sample_y; s_rows++){
+				for (int s_cols = 0; s_cols < sample_x; s_cols++){
+					/*マスク用の分岐*/
+					if (rgb((&img_sample), s_rows, s_cols, 0) == 0 &&
+						rgb((&img_sample), s_rows, s_cols, 1) == 0 &&
+						rgb((&img_sample), s_rows, s_cols, 2) == 0){
+						continue;//(0,0,0)なら，マスク部分として無視する
+					}
+					/*元画像で有効な範囲であれば*/
+					if (cols - sample_center_x + s_cols >= 0 &&
+						rows - sample_center_y + s_rows >= 0 &&
+						cols - sample_center_x + s_cols < img_x &&
+						rows - sample_center_y + s_rows < img_y){
+						/*差をとって*/
+						int distance_h = rgb((&img), rows - sample_center_y + s_rows, cols - sample_center_x + s_cols, 0) - rgb((&img_sample), s_rows, s_cols, 0);
+						int distance_s = rgb((&img), rows - sample_center_y + s_rows, cols - sample_center_x + s_cols, 1) - rgb((&img_sample), s_rows, s_cols, 1);
+						int distance_v = rgb((&img), rows - sample_center_y + s_rows, cols - sample_center_x + s_cols, 2) - rgb((&img_sample), s_rows, s_cols, 2);
+						/*正規化関数(0~255)にぶち込む*/
+						double distance_sum = ((distance_h + distance_s + distance_v) / 3) -128;
+						if (distance_sum < 0) distance_sum = 0;//ReLU関数
+						/*返り値をfilteredに足す*/
+						filtered += distance_sum;
+					}
+				}
+			}
+			/*filteredをimg_sampleの画素数で割る（正規化）*/
+			filtered /= sample_size;
+			/*img_dstの(rows,cols)に代入*/
+			rgb((&img_dst), rows, cols, 0) = filtered;
+			rgb((&img_dst), rows, cols, 1) = filtered;
+			rgb((&img_dst), rows, cols, 2) = filtered;
+		}
+	}
+
+	return;
+}
+
+cv::Mat labeL_num_extraction(cv::Mat *labeled, int label_num){
+	cv::Mat result(cv::Size(labeled->cols, labeled->rows), CV_8U, cv::Scalar::all(0));;
+
+
+	cv::Mat *result_pointer = &result;
+	
+	for (int rows = 0; rows < labeled->rows; rows++){
+		for (int cols = 0; cols < labeled->cols; cols++){
+			if (gray(labeled, rows, cols) == label_num){
+				//std::cout << cols << " " << rows << std::endl;
+				gray(result_pointer, rows, cols) = 255;
+			}
+			else{
+				gray(result_pointer, rows, cols) = 0;
+
+			}
+		}
+	}
+	return result;
+
 }
