@@ -68,7 +68,7 @@ void m_move_straight(double x, double y, double z, double a, double b);//指定�
 void m_move_circle2(double cx, double cy, double z, double r);//中心(cx,cy,z) 半径r の円を描くように移動する
 void shake();//姿勢a,bをガチャガチャ変える
 
-void check_where_coin();
+void check_where_coin();//お釣り用の硬貨の座標チェック
 /*画像処理部分*/
 void get_cog(BYTE *img, int label, double *gx, double *dy);//重心を取得する関数
 void get_size(BYTE *img, int label, double *size_x, double *size_y);//サイズを取得する関数
@@ -203,6 +203,7 @@ void mainfunc(HDC *hDC) {
 
 	//価格の認識 , 価格の表示
 	int kakaku = find_marker_and_get_price();
+	std::cout << kakaku << std::endl;
 	/*
 	//ユーザーがトレーに代金を置いてエンターキーを押すのを待つ
 	cv::waitKey();
@@ -2192,6 +2193,7 @@ void rot_90(cv::Mat &img){
 void check_where_coin(){
 	speed_change(22);
 	m_ungrip();
+	m_move_position_2(162, 148, 258.2, 0, 180);
 	m_move_position_2(162, 148, 248.2, 0, 180);
 	getchar();
 	m_grip();
@@ -2202,7 +2204,9 @@ void check_where_coin(){
 	m_grip();
 	getchar();
 	m_ungrip();
+	m_move_position_2(162, 148, 258.2, 90, 180);
 	m_home();
+	m_move_position_2(162, 208, 258.2, 0, 180);
 	m_move_position_2(162, 208, 248.2, 0, 180);
 	getchar();
 	m_grip();
@@ -2213,7 +2217,9 @@ void check_where_coin(){
 	m_grip();
 	getchar();
 	m_ungrip();
+	m_move_position_2(162, 208, 258.2, 90, 180);
 	m_home();
+	m_move_position_2(222, 148, 258.2, 0, 180);
 	m_move_position_2(222, 148, 248.2, 0, 180);
 	getchar();
 	m_grip();
@@ -2224,7 +2230,9 @@ void check_where_coin(){
 	m_grip();
 	getchar();
 	m_ungrip();
+	m_move_position_2(222, 148, 258.2, 90, 180);
 	m_home();
+	m_move_position_2(222, 208, 258.2, 0, 180);
 	m_move_position_2(222, 208, 248.2, 0, 180);
 	getchar();
 	m_grip();
@@ -2235,7 +2243,9 @@ void check_where_coin(){
 	m_grip();
 	getchar();
 	m_ungrip();
+	m_move_position_2(222, 208, 258.2, 90, 180);
 	m_home();
+	m_move_position_2(282, 148, 257.9, 0, 180);
 	m_move_position_2(282, 148, 247.9, 0, 180);
 	getchar();
 	m_grip();
@@ -2246,7 +2256,9 @@ void check_where_coin(){
 	m_grip();
 	getchar();
 	m_ungrip();
+	m_move_position_2(282, 148, 257.9, 90, 180);
 	m_home();
+	m_move_position_2(282, 208, 257.9, 0, 180);
 	m_move_position_2(282, 208, 247.9, 0, 180);
 	getchar();
 	m_grip();
@@ -2257,6 +2269,7 @@ void check_where_coin(){
 	m_grip();
 	getchar();
 	m_ungrip();
+	m_move_position_2(282, 208, 257.9, 90, 180);
 	m_home();
 
 
@@ -2288,7 +2301,7 @@ void return_change(map<long long int, long long int> coin){
 	*/
 	map<long long int, double> thickness;
 	thickness[1] = 1.5;
-	thickness[5] = 1.5;
+	thickness[5] = 1.47;
 	thickness[10] = 1.5;
 	thickness[50] = 1.7;
 	thickness[100] = 1.7;
@@ -2296,7 +2309,7 @@ void return_change(map<long long int, long long int> coin){
 
 	for (int i = 1; i <= coin[1]; i++){
 		m_home();
-		m_move_straight(160, 160, 250+(thickness[1]*(5.5-(double)i)), 0, 180);
+		m_move_straight(162, 148, 248.2 + (thickness[1] * (5 - (double)i)), 0, 180);
 		grip();
 		m_move_position_2(400, 0, 270, 0, 180);
 		ungrip();
@@ -2304,28 +2317,28 @@ void return_change(map<long long int, long long int> coin){
 	for (int i = 1; i <= coin[5]; i++){
 		m_home();
 
-		m_move_straight(160, 220, 250 + (thickness[5] * (5.5 - (double)i)), 0, 180);
+		m_move_straight(162, 208, 248.2 + (thickness[5] * (5 - (double)i)), 0, 180);
 		grip();
 		m_move_position_2(400, 0, 270, 0, 180);
 		ungrip();
 	}
 	for (int i = 1; i <= coin[10]; i++){
 		m_home();
-		m_move_straight(220, 160, 250 + (thickness[10] * (5.5 - (double)i)), 0, 180);
+		m_move_straight(222, 208, 248.2 + (thickness[10] * (5 - (double)i)), 0, 180);
 		grip();
 		m_move_position_2(400, 0, 270, 0, 180);
 		ungrip();
 	}
 	for (int i = 1; i <= coin[50]; i++){
 		m_home();
-		m_move_straight(220, 220, 250 + (thickness[50] * (5.5 - (double)i)), 0, 180);
+		m_move_straight(222, 208, 248.2 + (thickness[50] * (5 - (double)i)), 0, 180);
 		grip();
 		m_move_position_2(400, 0, 270, 0, 180);
 		ungrip();
 	}
 	for (int i = 1; i <= coin[100]; i++){
 		m_home();
-		m_move_straight(280, 160, 250 + (thickness[100] * (5.5 - (double)i)), 0, 180);
+		m_move_straight(280, 160, 250 + (thickness[100] * (5 - (double)i)), 0, 180);
 		grip();
 		m_move_position_2(400, 0, 270, 0, 180);
 		ungrip();
@@ -2333,7 +2346,7 @@ void return_change(map<long long int, long long int> coin){
 	}
 	for (int i = 1; i <= coin[500]; i++){
 		m_home();
-		m_move_straight(280, 220, 250 + (thickness[500] * (5.5 - (double)i)), 0, 180);
+		m_move_straight(280, 220, 250 + (thickness[500] * (5 - (double)i)), 0, 180);
 		grip();
 		m_move_position_2(400, 0, 270, 0, 180);
 		ungrip();
@@ -2553,6 +2566,7 @@ int ar_read(cv::Mat *image){
 引数:   nasi 
 --------------------------------------------------*/
 int find_marker_and_get_price(){
+	
 
 	int result = 0;
 	//cv::Mat img
@@ -2561,8 +2575,8 @@ int find_marker_and_get_price(){
 	//get_image_2(&img);
 
 	bool loop_flg;
-	cv::Mat img = cv::imread("coin_test9.png"/*"marker/AR264.png"*/,1);
-	/*
+	cv::Mat img;// = cv::imread("coin_test9.png"/*"marker/AR264.png"*/, 1);
+	
 	do{
 		loop_flg = FALSE;
 		get_image_2(&img);
@@ -2573,7 +2587,7 @@ int find_marker_and_get_price(){
 			loop_flg = TRUE;
 		}
 	} while (loop_flg);
-	*/
+	
 		//disp_image(&img, "");
 	to_gray(&img);
 	cv::Mat image_source;
@@ -2583,7 +2597,7 @@ int find_marker_and_get_price(){
 	cv::threshold(img, img, 0, 255, CV_THRESH_BINARY | CV_THRESH_OTSU);
 	cv::Mat labeled_image;
 	int label_num = labeling(&img, &labeled_image);
-	//disp_labeled_image(&labeled_image, "");
+	disp_labeled_image(&labeled_image, "");
 
 	copy_image(&img, &image_source);
 	// 変換後の画像での座標
@@ -2633,7 +2647,7 @@ int find_marker_and_get_price(){
 					tmp = tmp(roi);
 					//disp_image(&tmp, "");
 					int tmp_price = ar_read(&tmp);
-					//std::cout << tmp_price << std::endl;
+					std::cout << tmp_price<<" "<<label_i << std::endl;
 					cash_disp->add_total_price(tmp_price);
 					result += tmp_price;
 				}
