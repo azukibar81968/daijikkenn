@@ -18,7 +18,7 @@
 #Define
 ***************************************************/
 #define IMG_XSIZE 640
-#define IMG_YSIZE 
+#define IMG_YSIZE 480
 #define LABEL_THD 220
 #define MAX_OBJ 512
 /**************************************************/
@@ -94,12 +94,14 @@ int how_match(cv::Mat img);//移っている貨幣の総額を返す 最終的�
 
 void get_side_of_tray(cv::Mat image, int label, double *x, double *y);
 double get_direction_2(BYTE *img, int label, double* theta);//方向を取得する関数,傾きをついでにreturn
+double get_direction_from_corner(cv::Point2f dst_pt[]);
 double rad2deg(double rad);//弧度法を入力すると弧度法で返す
 void tray_where_to_grip(cv::Mat *image, int label, double *x, double *y);//トレイで掴みやすそうなとこを探す
 void get_image_2(cv::Mat *image);//透視変換済みの画像を撮影
 void rot_90(cv::Mat &img);//90ド回転
 int find_marker_and_get_price_prototype();//ARマーカ風のオブジェクトで値段計算
 int find_marker_and_get_price();//ARマーカ風のオブジェクトで値段計算
+int find_marker_and_get_pricea_and_throw();//ARマーカ風のオブジェクトで値段計算,でもって商品をバケツに突っ込む
 double average_of_Mat(cv::Mat *img);//白黒画像の平均を取る
 int ar_read(cv::Mat *img);//ARの切り抜き画像を読んで数値化
 bool is_marker(vector<vector<double>> grid);//マーカーか判断
@@ -197,19 +199,21 @@ void mainfunc(HDC *hDC) {
 
 	//レジ画面の実体化
 	cash_disp = new Cashregister_display();
-	
+
 	//ユーザーが品物を置いてエンターキーを押すのを待つ
 	cv::waitKey();
 
 	//価格の認識 , 価格の表示
 	int kakaku = find_marker_and_get_price();
+	
 	std::cout << kakaku << std::endl;
+	disp_image(img_work, "硬貨");
 	/*
 	//ユーザーがトレーに代金を置いてエンターキーを押すのを待つ
 	cv::waitKey();
 
 	//貨幣総額の認識
-	//cv::Mat img = cv::imread("resorce/test/coin_test5.png");
+
 	cv::Mat img_payment;
 	bool loop_flg = FALSE;
 	do{
@@ -1626,8 +1630,8 @@ void grip_and_shake_tray(){
 	
 		m_move_position_2(grip_rx - 10, grip_ry, 210, 0, 180);
 		m_move_position_2(grip_rx - 20, grip_ry, 210, 0, 160);
-		m_move_position_2(grip_rx - 40, grip_ry, 200, 0, 140);
-		m_move_position_2(grip_rx - 38, grip_ry, 195, 0, 140);
+		m_move_position_2(grip_rx - 33, grip_ry, 200, 0, 140);
+		m_move_position_2(grip_rx - 30, grip_ry, 195, 0, 140);
 		/*
 		m_move_position_2(grip_rx-50, grip_ry, 195, 0, 120);
 		m_move_straight(grip_rx - 50, grip_ry, 175, 0, 120);
@@ -1640,6 +1644,11 @@ void grip_and_shake_tray(){
 		wait_done();
 		std::cout << "shake" << std::endl;
 		shake();
+
+		m_move_position_2(300, 0, 480, 0, 140);
+		cv::waitKey();
+		get_image(img_work);
+
 		m_move_position_2(280, 0, 200, 0, 140);
 		ungrip();
 		m_move_position_2(310, 0, 210, 0, 160);
@@ -1791,8 +1800,8 @@ void grip_tray_and_getcoin(){
 
 		m_move_position_2(grip_rx - 10, grip_ry, 210, 0, 180);
 		m_move_position_2(grip_rx - 20, grip_ry, 210, 0, 160);
-		m_move_position_2(grip_rx - 40, grip_ry, 200, 0, 140);
-		m_move_position_2(grip_rx - 38, grip_ry, 195, 0, 140);
+		m_move_position_2(grip_rx - 33, grip_ry, 200, 0, 140);
+		m_move_position_2(grip_rx - 30, grip_ry, 195, 0, 140);
 		/*
 		m_move_position_2(grip_rx-50, grip_ry, 195, 0, 120);
 		m_move_straight(grip_rx - 50, grip_ry, 175, 0, 120);
@@ -1849,7 +1858,7 @@ void tray_where_to_grip(cv::Mat *image, int label, double *x, double *y){
 				sum++;
 			}
 		}
-		if (sum >= 300){
+		if (sum >= 400){
 			*x = (x_min + x_max) / 2;
 			*y = i;
 			return;
@@ -1948,7 +1957,26 @@ double get_direction_2(BYTE *img, int label, double *theta){
 	return (lambda - s11) / (s12);
 }
 
+double get_direction_from_corner(cv::Point2f dst_pt[]){
+	double gx, gy,theta;
+	gx = (dst_pt[0].x + dst_pt[1].x + dst_pt[2].x + dst_pt[3].x) / 4.;
 
+	gy = (dst_pt[0].y + dst_pt[1].y + dst_pt[2].y + dst_pt[3].y) / 4.;
+
+	double s11 = 0, s12 = 0, s22 = 0;
+	for (int i = 0; i <4; i++){
+		s11 += (dst_pt[i].x - gx)*(dst_pt[i].x - gx);
+		s12 += (dst_pt[i].x - gx)*(dst_pt[i].y - gy);
+		s22 += (dst_pt[i].y - gy)*(dst_pt[i].y - gy);
+	}
+	double lambda = (s11 + s22 + sqrt(s11*s11 + s22*s22 - 2 * s11*s22 + 4 * s12*s12)) / 2;
+	double result = std::atan2(lambda - s11, s12);
+	if (rad2deg(result) > 90){
+		result -= M_PI;
+	}
+	theta = result;
+	return theta;
+}
 
 /*--------------------------------------------------
 処理:	弧度法から度数法を
@@ -2648,6 +2676,117 @@ int find_marker_and_get_price(){
 					//disp_image(&tmp, "");
 					int tmp_price = ar_read(&tmp);
 					std::cout << tmp_price<<" "<<label_i << std::endl;
+					cash_disp->add_total_price(tmp_price);
+					result += tmp_price;
+				}
+			}
+		}
+	}
+	//disp_image(&image_source, "");
+	return result;
+}
+
+
+/*--------------------------------------------------
+処理:マーカを見っけて合計の値段を調べ理
+戻り値: 合計の値段
+引数:   nasi
+--------------------------------------------------*/
+int find_marker_and_get_price_and_throw(){
+
+
+	int result = 0;
+	//cv::Mat img
+
+
+	//get_image_2(&img);
+
+	bool loop_flg;
+	cv::Mat img;// = cv::imread("coin_test9.png"/*"marker/AR264.png"*/, 1);
+
+	do{
+		loop_flg = FALSE;
+		get_image_2(&img);
+		get_image_2(&img);
+		get_image_2(&img);
+		if (img.data == NULL){
+			printf("判定する画像の取得に失敗しました\n");
+			loop_flg = TRUE;
+		}
+	} while (loop_flg);
+
+	//disp_image(&img, "");
+	to_gray(&img);
+	cv::Mat image_source;
+	//disp_image(&img, "");
+
+
+	cv::threshold(img, img, 0, 255, CV_THRESH_BINARY | CV_THRESH_OTSU);
+	cv::Mat labeled_image;
+	int label_num = labeling(&img, &labeled_image);
+	disp_labeled_image(&labeled_image, "");
+
+	copy_image(&img, &image_source);
+	// 変換後の画像での座標
+	const cv::Point2f dst_pt[] = {
+		cv::Point2f(0, 0),
+		cv::Point2f(300, 0),
+		cv::Point2f(0, 300),
+		cv::Point2f(300, 300)
+	};
+
+	cv::Rect roi(cv::Point(0, 0), cv::Size(300, 300));
+
+
+	std::map<int, double> result_of_match;
+
+	//disp_image(&image_source, "");
+	std::vector<std::vector<cv::Point>> contours;
+	std::vector<cv::Vec4i> hierarchy;
+	cv::Mat tmp, label_i_image;
+
+	for (int label_i = 1; label_i <= label_num; label_i++){
+		int max_level = 0;
+		label_i_image = labeL_num_extraction(&labeled_image, label_i);
+		//disp_image(&label_i_image, "");
+		//cv::waitKey();
+		cv::findContours(label_i_image, contours, hierarchy, cv::RETR_EXTERNAL, cv::CHAIN_APPROX_TC89_L1);
+
+
+
+		for (int i = 0; i < contours.size(); i++) {
+			// ある程度の面積が有るものだけに絞る
+			double a = contourArea(contours[i], false);
+			if (a > 200) {
+				//輪郭を直線近似する
+				std::vector<cv::Point> approx;
+				cv::approxPolyDP(cv::Mat(contours[i]), approx, 0.05 * cv::arcLength(contours[i], true), true);
+				// 矩形のみ取得
+				//	std::cout << approx.size() << std::endl;
+				if (approx.size() == 4) {
+					cv::Point2f src_pt[4];
+					src_pt[0] = approx[0];
+					src_pt[1] = approx[1];
+					src_pt[2] = approx[3];
+					src_pt[3] = approx[2];
+					const cv::Mat homography_matrix = cv::getPerspectiveTransform(src_pt, dst_pt);
+					cv::warpPerspective(image_source, tmp, homography_matrix, image_source.size());
+					tmp = tmp(roi);
+					//disp_image(&tmp, "");
+					int tmp_price = ar_read(&tmp);
+					
+					std::cout << tmp_price << " " << label_i << std::endl;
+					if (tmp_price){
+						double cx = (src_pt[0].x + src_pt[1].x + src_pt[2].x + src_pt[3].x) / 4,
+							cy=(src_pt[0].x + src_pt[1].x + src_pt[2].x + src_pt[3].y) / 4, rx, ry;
+						exchange_ctor(cx, cy, &rx, &ry);
+						m_ungrip();
+						m_move_position_2(rx-5, ry, 300, get_direction_from_corner(src_pt), 180);
+						m_move_straight(rx-5, ry, 240, get_direction_from_corner(src_pt), 180);
+						m_grip();
+						m_move_straight(rx, ry, 300, get_direction_from_corner(src_pt), 180);
+						m_move_position_2(430, -129, 340, 0, 100);
+					}
 					cash_disp->add_total_price(tmp_price);
 					result += tmp_price;
 				}
