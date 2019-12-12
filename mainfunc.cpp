@@ -101,7 +101,7 @@ void get_image_2(cv::Mat *image);//透視変換済みの画像を撮影
 void rot_90(cv::Mat &img);//90ド回転
 int find_marker_and_get_price_prototype();//ARマーカ風のオブジェクトで値段計算
 int find_marker_and_get_price();//ARマーカ風のオブジェクトで値段計算
-int find_marker_and_get_pricea_and_throw();//ARマーカ風のオブジェクトで値段計算,でもって商品をバケツに突っ込む
+int find_marker_and_get_price_and_throw();//ARマーカ風のオブジェクトで値段計算,でもって商品をバケツに突っ込む
 double average_of_Mat(cv::Mat *img);//白黒画像の平均を取る
 int ar_read(cv::Mat *img);//ARの切り抜き画像を読んで数値化
 bool is_marker(vector<vector<double>> grid);//マーカーか判断
@@ -196,7 +196,7 @@ void mainfunc(HDC *hDC) {
 	//カメラの解像度設定，必須
 	cap.set(CV_CAP_PROP_FRAME_WIDTH, 1280);
 	cap.set(CV_CAP_PROP_FRAME_HEIGHT, 960);
-
+	//check_where_coin();
 	//レジ画面の実体化
 	cash_disp = new Cashregister_display();
 
@@ -204,11 +204,13 @@ void mainfunc(HDC *hDC) {
 	cv::waitKey();
 
 	//価格の認識 , 価格の表示
-	int kakaku = find_marker_and_get_price();
+	int kakaku = find_marker_and_get_price_and_throw();
 	
 	std::cout << kakaku << std::endl;
+	cv::waitKey();
+	grip_and_shake_tray();
 	disp_image(img_work, "硬貨");
-	/*
+	
 	//ユーザーがトレーに代金を置いてエンターキーを押すのを待つ
 	cv::waitKey();
 
@@ -227,8 +229,11 @@ void mainfunc(HDC *hDC) {
 		}
 	} while (loop_flg);
 
-	int payment = how_match(img_payment);
-
+	int payment =  how_match(*img_work);
+	cash_disp->set_received(payment);
+	cash_disp->set_change(payment - kakaku);
+	grip_tray_and_getcoin();
+	
 	//品物を出す
 	//なんかいい感じの関数
 
@@ -1513,10 +1518,10 @@ void grip_and_shake_tray(){
 	//image = cv::imread("sozai/sozai1.png");
 	to_gray(&image);
 	cv::threshold(image, image, 0, 255, CV_THRESH_BINARY | CV_THRESH_OTSU);
-	/*
-	erosion(&image, 3);
-	dilation(&image, 3);
-	*/
+	
+	erosion(&image, 2);
+	dilation(&image, 2);
+	
 	cv::Mat lab;
 	int label_num = labeling(&image, &lab);
 	disp_labeled_image(&lab, "画像処理表示");
@@ -1630,8 +1635,8 @@ void grip_and_shake_tray(){
 	
 		m_move_position_2(grip_rx - 10, grip_ry, 210, 0, 180);
 		m_move_position_2(grip_rx - 20, grip_ry, 210, 0, 160);
-		m_move_position_2(grip_rx - 33, grip_ry, 200, 0, 140);
-		m_move_position_2(grip_rx - 30, grip_ry, 195, 0, 140);
+		m_move_position_2(grip_rx - 20, grip_ry, 200, 0, 140);
+		m_move_position_2(grip_rx - 20, grip_ry, 195, 0, 140);
 		/*
 		m_move_position_2(grip_rx-50, grip_ry, 195, 0, 120);
 		m_move_straight(grip_rx - 50, grip_ry, 175, 0, 120);
@@ -1645,7 +1650,7 @@ void grip_and_shake_tray(){
 		std::cout << "shake" << std::endl;
 		shake();
 
-		m_move_position_2(300, 0, 480, 0, 140);
+		m_move_position_2(350, 0, 500, 0, 140);
 		cv::waitKey();
 		get_image(img_work);
 
@@ -1800,8 +1805,8 @@ void grip_tray_and_getcoin(){
 
 		m_move_position_2(grip_rx - 10, grip_ry, 210, 0, 180);
 		m_move_position_2(grip_rx - 20, grip_ry, 210, 0, 160);
-		m_move_position_2(grip_rx - 33, grip_ry, 200, 0, 140);
-		m_move_position_2(grip_rx - 30, grip_ry, 195, 0, 140);
+		m_move_position_2(grip_rx - 20, grip_ry, 200, 0, 140);
+		m_move_position_2(grip_rx - 20, grip_ry, 195, 0, 140);
 		/*
 		m_move_position_2(grip_rx-50, grip_ry, 195, 0, 120);
 		m_move_straight(grip_rx - 50, grip_ry, 175, 0, 120);
@@ -2222,82 +2227,82 @@ void check_where_coin(){
 	speed_change(22);
 	m_ungrip();
 	m_move_position_2(162, 148, 258.2, 0, 180);
-	m_move_position_2(162, 148, 248.2, 0, 180);
+	m_move_position_2(162, 148, 248.6, 0, 180);
 	getchar();
 	m_grip();
 	getchar();
 	m_ungrip();
-	m_move_position_2(162, 148, 248.2, 90, 180);
+	m_move_position_2(162, 148, 248.6, 90, 180);
 	getchar();
 	m_grip();
 	getchar();
 	m_ungrip();
-	m_move_position_2(162, 148, 258.2, 90, 180);
+	m_move_position_2(162, 148, 258.6, 90, 180);
 	m_home();
-	m_move_position_2(162, 208, 258.2, 0, 180);
-	m_move_position_2(162, 208, 248.2, 0, 180);
+	m_move_position_2(162, 208, 258.6, 0, 180);
+	m_move_position_2(162, 208, 248.6, 0, 180);
 	getchar();
 	m_grip();
 	getchar();
 	m_ungrip();
-	m_move_position_2(162, 208, 248.2, 90, 180);
+	m_move_position_2(162, 208, 248.6, 90, 180);
 	getchar();
 	m_grip();
 	getchar();
 	m_ungrip();
-	m_move_position_2(162, 208, 258.2, 90, 180);
+	m_move_position_2(162, 208, 258.6, 90, 180);
 	m_home();
-	m_move_position_2(222, 148, 258.2, 0, 180);
-	m_move_position_2(222, 148, 248.2, 0, 180);
+	m_move_position_2(222, 148, 258.6, 0, 180);
+	m_move_position_2(222, 148, 248.6, 0, 180);
 	getchar();
 	m_grip();
 	getchar();
 	m_ungrip();
-	m_move_position_2(222, 148, 248.2, 90, 180);
+	m_move_position_2(222, 148, 248.6, 90, 180);
 	getchar();
 	m_grip();
 	getchar();
 	m_ungrip();
-	m_move_position_2(222, 148, 258.2, 90, 180);
+	m_move_position_2(222, 148, 258.6, 90, 180);
 	m_home();
-	m_move_position_2(222, 208, 258.2, 0, 180);
-	m_move_position_2(222, 208, 248.2, 0, 180);
+	m_move_position_2(222, 208, 258.6, 0, 180);
+	m_move_position_2(222, 208, 248.6, 0, 180);
 	getchar();
 	m_grip();
 	getchar();
 	m_ungrip();
-	m_move_position_2(222, 208, 248.2, 90, 180);
+	m_move_position_2(222, 208, 248.6, 90, 180);
 	getchar();
 	m_grip();
 	getchar();
 	m_ungrip();
-	m_move_position_2(222, 208, 258.2, 90, 180);
+	m_move_position_2(222, 208, 258.6, 90, 180);
 	m_home();
-	m_move_position_2(282, 148, 257.9, 0, 180);
-	m_move_position_2(282, 148, 247.9, 0, 180);
+	m_move_position_2(282, 148, 258.6, 0, 180);
+	m_move_position_2(282, 148, 248.2, 0, 180);
 	getchar();
 	m_grip();
 	getchar();
 	m_ungrip();
-	m_move_position_2(282, 148, 247.9, 90, 180);
+	m_move_position_2(282, 148, 248.2, 90, 180);
 	getchar();
 	m_grip();
 	getchar();
 	m_ungrip();
-	m_move_position_2(282, 148, 257.9, 90, 180);
+	m_move_position_2(282, 148, 258.2, 90, 180);
 	m_home();
-	m_move_position_2(282, 208, 257.9, 0, 180);
-	m_move_position_2(282, 208, 247.9, 0, 180);
+	m_move_position_2(282, 208, 258.2, 0, 180);
+	m_move_position_2(282, 208, 248.2, 0, 180);
 	getchar();
 	m_grip();
 	getchar();
 	m_ungrip();
-	m_move_position_2(282, 208, 247.9, 90, 180);
+	m_move_position_2(282, 208, 248.2, 90, 180);
 	getchar();
 	m_grip();
 	getchar();
 	m_ungrip();
-	m_move_position_2(282, 208, 257.9, 90, 180);
+	m_move_position_2(282, 208, 258.2, 90, 180);
 	m_home();
 
 
@@ -2337,45 +2342,62 @@ void return_change(map<long long int, long long int> coin){
 
 	for (int i = 1; i <= coin[1]; i++){
 		m_home();
-		m_move_straight(162, 148, 248.2 + (thickness[1] * (5 - (double)i)), 0, 180);
-		grip();
+		m_move_position_2(162, 148, 268.2 + (thickness[1] * (5 - (double)i)), 0, 180);
+		m_move_straight(162, 148, 248.6 + (thickness[1] * (5 - (double)i)), 0, 180);
+		wait_done();
+		m_grip();
+		m_move_position_2(162, 148, 268.2 + (thickness[1] * (5 - (double)i)), 0, 180);
 		m_move_position_2(400, 0, 270, 0, 180);
 		ungrip();
 	}
 	for (int i = 1; i <= coin[5]; i++){
 		m_home();
-
-		m_move_straight(162, 208, 248.2 + (thickness[5] * (5 - (double)i)), 0, 180);
-		grip();
+		m_move_position_2(162, 208, 268.2 + (thickness[5] * (1 - (double)i)), 0, 180);
+		m_move_straight(162, 208, 248.6 + (thickness[5] * (1 - (double)i)), 0, 180);
+		wait_done();
+		m_grip();
+		m_move_position_2(162, 208, 268.2 + (thickness[5] * (1 - (double)i)), 0, 180);
 		m_move_position_2(400, 0, 270, 0, 180);
 		ungrip();
 	}
 	for (int i = 1; i <= coin[10]; i++){
 		m_home();
-		m_move_straight(222, 208, 248.2 + (thickness[10] * (5 - (double)i)), 0, 180);
-		grip();
+		m_move_position_2(222, 148, 268.2 + (thickness[10] * (5 - (double)i)), 0, 180);
+		m_move_straight(222, 148, 248.6 + (thickness[10] * (5 - (double)i)), 0, 180);
+		wait_done();
+		m_grip();
+		m_move_position_2(222, 148, 268.2 + (thickness[10] * (5 - (double)i)), 0, 180);
 		m_move_position_2(400, 0, 270, 0, 180);
 		ungrip();
 	}
 	for (int i = 1; i <= coin[50]; i++){
 		m_home();
-		m_move_straight(222, 208, 248.2 + (thickness[50] * (5 - (double)i)), 0, 180);
-		grip();
+		m_move_position_2(222, 208, 268.2 + (thickness[50] * (1 - (double)i)), 0, 180);
+		m_move_straight(222, 208, 248.6 + (thickness[50] * (1 - (double)i)), 0, 180);
+		wait_done();
+		m_grip();
+		m_move_position_2(222, 208, 268.2 + (thickness[50] * (1 - (double)i)), 0, 180);
 		m_move_position_2(400, 0, 270, 0, 180);
 		ungrip();
 	}
 	for (int i = 1; i <= coin[100]; i++){
 		m_home();
-		m_move_straight(280, 160, 250 + (thickness[100] * (5 - (double)i)), 0, 180);
-		grip();
+		m_move_position_2(282, 148, 268.2 + (thickness[100] * (5 - (double)i)), 0, 180);
+		m_move_straight(282, 148, 248.2 + (thickness[100] * (5 - (double)i)), 0, 180);
+		wait_done();
+		m_grip();
+		m_move_position_2(282, 148, 268.2 + (thickness[100] * (5 - (double)i)), 0, 180);
 		m_move_position_2(400, 0, 270, 0, 180);
 		ungrip();
 
 	}
 	for (int i = 1; i <= coin[500]; i++){
 		m_home();
-		m_move_straight(280, 220, 250 + (thickness[500] * (5 - (double)i)), 0, 180);
-		grip();
+		m_move_position_2(282, 208, 268.2 + (thickness[500] * (1 - (double)i)), 0, 180);
+		m_move_straight(282, 208, 248.2 + (thickness[500] * (1 - (double)i)), 0, 180);
+		wait_done();
+		m_grip();
+		m_move_position_2(282, 208, 268.2 + (thickness[500] * (1 - (double)i)), 0, 180);
 		m_move_position_2(400, 0, 270, 0, 180);
 		ungrip();
 	}
@@ -2658,7 +2680,7 @@ int find_marker_and_get_price(){
 		for (int i = 0; i < contours.size(); i++) {
 			// ある程度の面積が有るものだけに絞る
 			double a = contourArea(contours[i], false);
-			if (a > 200) {
+			if (a > 80) {
 				//輪郭を直線近似する
 				std::vector<cv::Point> approx;
 				cv::approxPolyDP(cv::Mat(contours[i]), approx, 0.05 * cv::arcLength(contours[i], true), true);
@@ -2714,7 +2736,8 @@ int find_marker_and_get_price_and_throw(){
 			loop_flg = TRUE;
 		}
 	} while (loop_flg);
-
+	erosion(&img, 2);
+	dilation(&img,2);
 	//disp_image(&img, "");
 	to_gray(&img);
 	cv::Mat image_source;
@@ -2757,7 +2780,7 @@ int find_marker_and_get_price_and_throw(){
 		for (int i = 0; i < contours.size(); i++) {
 			// ある程度の面積が有るものだけに絞る
 			double a = contourArea(contours[i], false);
-			if (a > 200) {
+			if (a > 80) {
 				//輪郭を直線近似する
 				std::vector<cv::Point> approx;
 				cv::approxPolyDP(cv::Mat(contours[i]), approx, 0.05 * cv::arcLength(contours[i], true), true);
@@ -2778,14 +2801,16 @@ int find_marker_and_get_price_and_throw(){
 					std::cout << tmp_price << " " << label_i << std::endl;
 					if (tmp_price){
 						double cx = (src_pt[0].x + src_pt[1].x + src_pt[2].x + src_pt[3].x) / 4,
-							cy=(src_pt[0].x + src_pt[1].x + src_pt[2].x + src_pt[3].y) / 4, rx, ry;
+							cy=(src_pt[0].y + src_pt[1].y+ src_pt[2].y + src_pt[3].y) / 4, rx, ry;
 						exchange_ctor(cx, cy, &rx, &ry);
 						m_ungrip();
-						m_move_position_2(rx-5, ry, 300, get_direction_from_corner(src_pt), 180);
-						m_move_straight(rx-5, ry, 240, get_direction_from_corner(src_pt), 180);
+						m_move_position_2(rx+22, ry, 300,rad2deg(get_direction_from_corner(src_pt)), 180);
+						m_move_straight(rx + 22, ry, 220, rad2deg(get_direction_from_corner(src_pt)), 180);
 						m_grip();
-						m_move_straight(rx, ry, 300, get_direction_from_corner(src_pt), 180);
-						m_move_position_2(430, -129, 340, 0, 100);
+						m_move_straight(rx+22, ry, 340, get_direction_from_corner(src_pt), 180);
+						m_move_position_2(430, -169, 340, 90, 100);
+						m_ungrip();
+						m_home();
 					}
 					cash_disp->add_total_price(tmp_price);
 					result += tmp_price;
