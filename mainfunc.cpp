@@ -207,7 +207,7 @@ int movie(){
 	// 動画ファイルを取り込むためのオブジェクトを宣言する
 	cv::VideoCapture cap2;
 	cap2.open("uso.mp4");
-
+	
 	// 動画ファイルが開けたか調べる
 	if (cap2.isOpened() == false) {
 		printf("ファイルが開けません。\n");
@@ -270,7 +270,14 @@ int movie(){
 mainfunc: メイン処理（実際の処理を記述）
 ***************************************************/
 void mainfunc(HDC *hDC) {
-	
+	cv::Point2f dst_pt[] = {
+		cv::Point2f(-1, 1),
+		cv::Point2f(10, 10),
+		cv::Point2f(0, 20),
+		cv::Point2f(-11, 11)
+	};
+	std::cout << get_direction_from_corner(dst_pt);
+
 	std::thread movie_thread(movie);
 	std::cout << "unko" << std::endl;
 	//カメラの解像度設定，必須
@@ -2058,16 +2065,34 @@ double get_direction_2(BYTE *img, int label, double *theta){
 
 double get_direction_from_corner(cv::Point2f dst_pt[]){
 	double gx, gy,theta;
-	gx = (dst_pt[0].x + dst_pt[1].x + dst_pt[2].x + dst_pt[3].x) / 4.;
-
-	gy = (dst_pt[0].y + dst_pt[1].y + dst_pt[2].y + dst_pt[3].y) / 4.;
-
 	double s11 = 0, s12 = 0, s22 = 0;
-	for (int i = 0; i <4; i++){
-		s11 += (dst_pt[i].x - gx)*(dst_pt[i].x - gx);
-		s12 += (dst_pt[i].x - gx)*(dst_pt[i].y - gy);
-		s22 += (dst_pt[i].y - gy)*(dst_pt[i].y - gy);
+	if (abs((dst_pt[0].x - dst_pt[1].x)*(dst_pt[0].x - dst_pt[1].x) + (dst_pt[0].y - dst_pt[1].y)*(dst_pt[0].y - dst_pt[1].y) > (dst_pt[2].x - dst_pt[1].x)*(dst_pt[2].x - dst_pt[1].x) + (dst_pt[2].y - dst_pt[1].y)*(dst_pt[2].y - dst_pt[1].y)))
+	{
+		gx = (dst_pt[0].x + dst_pt[1].x) / 2.;
+
+		gy = (dst_pt[0].y + dst_pt[1].y)*1.2 / 2.;
+
+		for (int i = 0; i <2; i++){
+			s11 += (dst_pt[i].x - gx)*(dst_pt[i].x - gx);
+			s12 += (dst_pt[i].x - gx)*(1.2*dst_pt[i].y - gy);
+			s22 += (1.2*dst_pt[i].y - gy)*(1.2* dst_pt[i].y - gy);
+		}
+
 	}
+	else{
+		gx = (dst_pt[2].x + dst_pt[1].x) / 2.;
+
+		gy = (dst_pt[2].y + dst_pt[1].y)*1.2 / 2.;
+
+		for (int i = 1; i <3; i++){
+			s11 += (dst_pt[i].x - gx)*(dst_pt[i].x - gx);
+			s12 += (dst_pt[i].x - gx)*(1.2*dst_pt[i].y - gy);
+			s22 += (1.2*dst_pt[i].y - gy)*(1.2* dst_pt[i].y - gy);
+		}
+
+	}
+
+	
 	double lambda = (s11 + s22 + sqrt(s11*s11 + s22*s22 - 2 * s11*s22 + 4 * s12*s12)) / 2;
 	double result = std::atan2(lambda - s11, s12);
 	if (rad2deg(result) > 90){
