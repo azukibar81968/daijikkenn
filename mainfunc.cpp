@@ -10,6 +10,7 @@
 #include <string>
 #include <algorithm>
 #include <map>
+#include <thread>
 #include "img.h"
 #include <Windows.h>
 /**************************************************/
@@ -127,6 +128,7 @@ public:
 		received = -1;
 		total_price = -1;
 		change = -1;
+		lack = 1;
 		update();
 	}
 	void add_total_price(long long int price){
@@ -144,6 +146,12 @@ public:
 	}
 	void set_change(int ch){
 		change = ch;
+		update();
+	}
+
+	//負のお釣りをわたす
+	void lack_of_pay(int n){
+		lack = n;
 		update();
 	}
 private:
@@ -171,7 +179,14 @@ private:
 			}
 			putText(display_image, "change   :"+tmp  + std::to_string(change), cv::Point(20, 240), 0 ,2,cv::Scalar(0, 255, 99), 6, CV_AA);
 		}
-		if (total_price < 0 && received < 0 && change < 0){
+		if (lack < 0){
+			tmp = "";
+			for (int i = 5; i > log10(abs(lack)); i--){
+				tmp.push_back(' ');
+			}
+			putText(display_image, "lack!!   :" + tmp + std::to_string(-lack), cv::Point(20, 320), 0, 2, cv::Scalar(0, 255, 99), 6, CV_AA);
+		}
+		if (total_price < 0 && received < 0 && change < 0&&lack>0){
 			putText(display_image, "Welcome !!", cv::Point(220,240 ), cv::FONT_HERSHEY_SIMPLEX, 2, cv::Scalar(0, 255, 99), 6, CV_AA);
 			putText(display_image, "Please put Product here", cv::Point(100, 300), cv::FONT_HERSHEY_SIMPLEX, 1.5, cv::Scalar(0, 255, 99), 6, CV_AA);
 		}
@@ -180,26 +195,96 @@ private:
 		cv::waitKey(2);
 	}
 	cv::Mat display_image;
-	long long int received, total_price, change;
+	long long int received, total_price, change,lack;
 
 };
 
-
-
 //ポインタをｸﾞﾛｰｰｰﾊﾞﾙ宣言，他の関数内から呼び出すため インスタンスはmainfuncのはじめで作成
 Cashregister_display *cash_disp;
+
+int movie(){
+
+	// 動画ファイルを取り込むためのオブジェクトを宣言する
+	cv::VideoCapture cap2;
+	cap2.open("uso.mp4");
+
+	// 動画ファイルが開けたか調べる
+	if (cap2.isOpened() == false) {
+		printf("ファイルが開けません。\n");
+		return -1;
+	}
+
+	// 画像を格納するオブジェクトを宣言する
+	cv::Mat frame;
+
+	for (;;) {
+		// 1フレームを取り込む
+		cap2 >> frame;				// cap から frame へ
+
+		// 画像から空のとき、無限ループを抜ける
+		if (frame.empty() == true) {
+			break;
+		}
+
+		// ウィンドウに画像を表示する
+		cv::imshow("再生中", frame);
+
+		// 33ms待つ
+		// キー入力されたらkeyへ文字コードを代入する
+		int key = cv::waitKey(33);
+
+		// 現在のフレーム番号（先頭から何フレーム目か）を表示する
+		int n = (int)cap2.get(CV_CAP_PROP_POS_FRAMES);	// フレームの位置を取得
+		int m = (int)cap2.get(CV_CAP_PROP_FRAME_COUNT);	// 全フレーム数を取得
+		if (n == m){
+			cap2.open("uso.mp4");
+		}
+		//printf("フレーム %4d/%d\r", n, m);
+
+		if (key == ' ') {			// スペースキーが押されたら一時停止する
+			//printf("\n一時停止\n");
+			cv::waitKey();
+
+		}
+		else if (key == 'r') {	// Rキーが押されたら先頭から再生しなおす
+			//printf("\n巻き戻し\n");
+			cap2.set(CV_CAP_PROP_POS_FRAMES, 0);  // フレームの位置を0に設定
+
+		}
+		else if (key == 's') {	// Sキーが押されたら30フレームスキップする
+			//printf("\nスキップ\n");
+			cap2.set(CV_CAP_PROP_POS_FRAMES, n + 30);	// n+30に設定
+
+		}
+		else if (key == 0x1b) {	// ESCキーが押されたら終了する
+			break;
+		}
+	}
+
+	return 0;
+}
+
+
 
 /***************************************************
 mainfunc: メイン処理（実際の処理を記述）
 ***************************************************/
 void mainfunc(HDC *hDC) {
+	
+	std::thread movie_thread(movie);
+	std::cout << "unko" << std::endl;
 	//カメラの解像度設定，必須
 	cap.set(CV_CAP_PROP_FRAME_WIDTH, 1280);
 	cap.set(CV_CAP_PROP_FRAME_HEIGHT, 960);
 	//check_where_coin();
 	//レジ画面の実体化
 	cash_disp = new Cashregister_display();
-
+	for (;;){
+		std::cout << "unko" << std::endl;
+	}
+	/*
+	cash_disp->lack_of_pay(-100);
+	
 	//ユーザーが品物を置いてエンターキーを押すのを待つ
 	cv::waitKey();
 
@@ -208,7 +293,10 @@ void mainfunc(HDC *hDC) {
 	
 	std::cout << kakaku << std::endl;
 	cv::waitKey();
+
+
 	grip_and_shake_tray();
+	//デバッグ用
 	disp_image(img_work, "硬貨");
 	
 	//ユーザーがトレーに代金を置いてエンターキーを押すのを待つ
@@ -230,6 +318,10 @@ void mainfunc(HDC *hDC) {
 	} while (loop_flg);
 
 	int payment =  how_match(*img_work);
+	int change = payment - kakaku;
+	if (kakaku < 0){
+
+	}
 	cash_disp->set_received(payment);
 	cash_disp->set_change(payment - kakaku);
 	grip_tray_and_getcoin();
@@ -1818,10 +1910,12 @@ void grip_tray_and_getcoin(){
 		rsputs("GP 63,63,3");
 		wait_done();
 		
-		m_move_position_2(70, 70, 500, 30, 140);
-		m_move_straight(70, 70, 500, -140, 130);
+		m_move_position_2(70, 120, 500, 30, 140);
+		m_move_straight(70, 120, 500, -160, 130);
 		
-		m_move_position_2(70, 70, 500, 0, 140);
+		m_move_position_2(70, 120, 500, 0, 140);
+		m_move_position_2(300, 0, 500, 0, 140);
+
 		m_move_position_2(280, 0, 200, 0, 140);
 		ungrip();
 		m_move_position_2(310, 0, 210, 0, 160);
