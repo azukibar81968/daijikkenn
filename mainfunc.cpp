@@ -138,25 +138,33 @@ public:
 		}
 
 		total_price += price;
-		update();
 	}
 	void set_received(int re){
 		received = re;
-		update();
 	}
 	void set_change(int ch){
 		change = ch;
-		update();
 	}
 
 	//負のお釣りをわたす
 	void lack_of_pay(int n){
 		lack = n;
-		update();
 	}
-private:
-	void update(){
-		display_image = cv::Mat::zeros(500, 800, CV_8UC3);
+
+	void update(cv::Mat write = cv::Mat::zeros(500, 800, CV_8UC3)){
+		display_image = write;
+
+		{		
+			cv::Mat tmp;
+			cv::cvtColor(display_image, tmp, CV_8UC1);
+			if (average_of_Mat(&tmp) <5){
+				display_image = pre;
+				std::cout << "buriburi" << std::endl;
+			}
+			else {
+				pre = display_image;
+			}
+		}
 		std::string tmp;
 		if (total_price >= 0){
 			tmp = "";
@@ -190,11 +198,11 @@ private:
 			putText(display_image, "Welcome !!", cv::Point(220,240 ), cv::FONT_HERSHEY_SIMPLEX, 2, cv::Scalar(0, 255, 99), 6, CV_AA);
 			putText(display_image, "Please put Product here", cv::Point(100, 300), cv::FONT_HERSHEY_SIMPLEX, 1.5, cv::Scalar(0, 255, 99), 6, CV_AA);
 		}
-		cv::waitKey(2);
 		cv::imshow("H10店へようこそ", display_image);
-		cv::waitKey(2);
+		cv::waitKey(1);
 	}
-	cv::Mat display_image;
+private:
+	cv::Mat display_image, pre = cv::Mat::zeros(500, 800, CV_8UC3);
 	long long int received, total_price, change,lack;
 
 };
@@ -218,6 +226,7 @@ int movie(){
 	cv::Mat frame;
 
 	for (;;) {
+		//std::cout << "kusa" << std::endl;
 		// 1フレームを取り込む
 		cap2 >> frame;				// cap から frame へ
 
@@ -228,16 +237,17 @@ int movie(){
 
 		// ウィンドウに画像を表示する
 		cv::imshow("再生中", frame);
-
+		cash_disp->update(frame);
 		// 33ms待つ
 		// キー入力されたらkeyへ文字コードを代入する
-		int key = cv::waitKey(33);
+		int key = cv::waitKey(50);
 
 		// 現在のフレーム番号（先頭から何フレーム目か）を表示する
 		int n = (int)cap2.get(CV_CAP_PROP_POS_FRAMES);	// フレームの位置を取得
 		int m = (int)cap2.get(CV_CAP_PROP_FRAME_COUNT);	// 全フレーム数を取得
 		if (n == m){
-			cap2.open("uso.mp4");
+			//cap2.open("uso.mp4");
+			cap2.set(CV_CAP_PROP_POS_FRAMES,0);
 		}
 		//printf("フレーム %4d/%d\r", n, m);
 
@@ -278,7 +288,7 @@ void mainfunc(HDC *hDC) {
 	};
 	std::cout << get_direction_from_corner(dst_pt);
 
-	std::thread movie_thread(movie);
+	
 	std::cout << "unko" << std::endl;
 	//カメラの解像度設定，必須
 	cap.set(CV_CAP_PROP_FRAME_WIDTH, 1280);
@@ -286,10 +296,15 @@ void mainfunc(HDC *hDC) {
 	//check_where_coin();
 	//レジ画面の実体化
 	cash_disp = new Cashregister_display();
-	for (;;){
+	std::thread movie_thread(movie);
+	for(int i=0;i<10;i++){
+		cv::waitKey();
 		std::cout << "unko" << std::endl;
+		if (i == 5){
+			Sleep(1000);
+		}
 	}
-	/*
+	
 	cash_disp->lack_of_pay(-100);
 	
 	//ユーザーが品物を置いてエンターキーを押すのを待つ
@@ -304,8 +319,9 @@ void mainfunc(HDC *hDC) {
 
 	grip_and_shake_tray();
 	//デバッグ用
-	disp_image(img_work, "硬貨");
-	
+	if (img_work->data != NULL){
+		disp_image(img_work, "硬貨");
+	}
 	//ユーザーがトレーに代金を置いてエンターキーを押すのを待つ
 	cv::waitKey();
 
@@ -1623,7 +1639,7 @@ void grip_and_shake_tray(){
 	
 	cv::Mat lab;
 	int label_num = labeling(&image, &lab);
-	disp_labeled_image(&lab, "画像処理表示");
+	//disp_labeled_image(&lab, "画像処理表示");
 	for (int i = 1; i <= label_num; i++){
 		if (160000 < get_size(&lab, i) && get_size(&lab, i) < 174000){
 			tray_label = i;
@@ -1793,7 +1809,7 @@ void grip_tray_and_getcoin(){
 	erosion(&image, 2);
 	cv::Mat lab;
 	int label_num = labeling(&image, &lab);
-	disp_labeled_image(&lab, "画像処理表示");
+	//disp_labeled_image(&lab, "画像処理表示");
 	for (int i = 1; i <= label_num; i++){
 		if (160000 < get_size(&lab, i) && get_size(&lab, i) < 174000){
 			tray_label = i;
@@ -2156,7 +2172,7 @@ int find_marker_and_get_price_prototype(){
 	cv::threshold(img, img, 0, 255, CV_THRESH_BINARY | CV_THRESH_OTSU);
 	cv::Mat *labeled=new cv::Mat;
 	int label_num = labelling(&img,labeled),size;
-	disp_labeled_image(labeled, "");
+	//disp_labeled_image(labeled, "");
 	cv::waitKey();
 	// 変換後の画像での座標
 	const cv::Point2f dst_pt[] = {
@@ -2175,7 +2191,7 @@ int find_marker_and_get_price_prototype(){
 	for (int i = 1; i <= label_num; i++){
 		size = get_size(labeled,i);
 		std::cout << i << " " << size << std::endl;
-		disp_labeled_image(labeled, "");
+		//disp_labeled_image(labeled, "");
 		cv::waitKey();
 		if (size >= 1000 && size <= 100000){
 			std::cout << "マーカくらいのおおきさ?" << std::endl;
@@ -2570,6 +2586,7 @@ int ar_read(cv::Mat *image){
 			rect = cv::Rect(j*img->cols / 6, i*img->rows / 6, img->cols / 6, img->rows / 6);
 			out=(*img)(rect);
 			grid[i][j]=average_of_Mat(&out);
+			std::cout << grid[i][j] << " " << (double)cv::mean(out)[0] << std::endl;
 		//	cout << grid[i][j] << " ";
 		}
 		//cout << endl;
@@ -2766,7 +2783,7 @@ int find_marker_and_get_price(){
 	cv::threshold(img, img, 0, 255, CV_THRESH_BINARY | CV_THRESH_OTSU);
 	cv::Mat labeled_image;
 	int label_num = labeling(&img, &labeled_image);
-	disp_labeled_image(&labeled_image, "");
+	//disp_labeled_image(&labeled_image, "");
 
 	copy_image(&img, &image_source);
 	// 変換後の画像での座標
@@ -2866,7 +2883,7 @@ int find_marker_and_get_price_and_throw(){
 	cv::threshold(img, img, 0, 255, CV_THRESH_BINARY | CV_THRESH_OTSU);
 	cv::Mat labeled_image;
 	int label_num = labeling(&img, &labeled_image);
-	disp_labeled_image(&labeled_image, "");
+	//disp_labeled_image(&labeled_image, "");
 
 	copy_image(&img, &image_source);
 	// 変換後の画像での座標
@@ -2998,13 +3015,8 @@ bool is_marker(vector<vector<double>> grid){
 引数:   画像img
 --------------------------------------------------*/
 double average_of_Mat(cv::Mat *img){
-	double result = 0, img_size = img->rows*img->cols;
-	for (int i = 0; i < img->rows; i++){
-		for (int j = 0; j < img->cols; j++){
-			result += double(gray(img, i, j))/img_size;
-		}
-	}
-	return result;
+
+	return (int)cv::mean(*img)[0];
 }
 
 
