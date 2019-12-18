@@ -12,6 +12,7 @@
 #include <map>
 #include <thread>
 #include "img.h"
+#include <random>
 #include <Windows.h>
 /**************************************************/
 
@@ -119,6 +120,7 @@ void return_change(map<long long int, long long int> coin);//お釣りをトレ�
 std::map<long long int, long long int> accounting(long long int received, long long int total_price);//返すべきお釣りの内訳をしらべる
 
 //レジとかのがめんのやつ～
+cv::Mat display_image;
 class Cashregister_display{
 public:
 	Cashregister_display(){
@@ -153,7 +155,7 @@ public:
 
 	void update(cv::Mat write = cv::Mat::zeros(500, 800, CV_8UC3)){
 		display_image = write;
-
+		/*
 		{		
 			cv::Mat tmp;
 			cv::cvtColor(display_image, tmp, CV_8UC1);
@@ -165,6 +167,7 @@ public:
 				pre = display_image;
 			}
 		}
+	*/
 		std::string tmp;
 		if (total_price >= 0){
 			tmp = "";
@@ -198,11 +201,13 @@ public:
 			putText(display_image, "Welcome !!", cv::Point(220,240 ), cv::FONT_HERSHEY_SIMPLEX, 2, cv::Scalar(0, 255, 99), 6, CV_AA);
 			putText(display_image, "Please put Product here", cv::Point(100, 300), cv::FONT_HERSHEY_SIMPLEX, 1.5, cv::Scalar(0, 255, 99), 6, CV_AA);
 		}
-		cv::imshow("H10店へようこそ", display_image);
+		
+		cv::imshow("H10店へようこそ 本(ロボット動かす方)重い動作でとまる この画面はwaitkeyを動かせる", display_image);
 		cv::waitKey(1);
+	
 	}
 private:
-	cv::Mat display_image, pre = cv::Mat::zeros(500, 800, CV_8UC3);
+	cv::Mat pre = cv::Mat::zeros(500, 800, CV_8UC3);
 	long long int received, total_price, change,lack;
 
 };
@@ -213,22 +218,36 @@ Cashregister_display *cash_disp;
 int movie(){
 
 	// 動画ファイルを取り込むためのオブジェクトを宣言する
-	cv::VideoCapture cap2;
-	cap2.open("uso.mp4");
-	
-	// 動画ファイルが開けたか調べる
-	if (cap2.isOpened() == false) {
-		printf("ファイルが開けません。\n");
-		return -1;
-	}
+	//cv::VideoCapture cap2;
+	//cap2.open("uso.mp4");
+	std::map<string, cv::VideoCapture> cap2;
+	cap2["ojigi"];
+	cap2["test1"];
+	cap2["test2"];
+	cap2["test3"];
+	for (auto &x : cap2){
+		//動画を開く
+		x.second.open("movie/" + x.first + ".mp4");
+		// 動画ファイルが開けたか調べる
+
+		if (x.second.isOpened() == false) {
+			std::cout << x.first << "が開けません" << std::endl;
+			//return -1;
+		}
+	}    
+	std::random_device rnd;     // 非決定的な乱数生成器を生成
+	std::mt19937 mt(rnd());     //  メルセンヌ・ツイスタの32ビット版、引数は初期シード値
+	std::uniform_int_distribution<> rand3(1, 3);        // [1, 3] 範囲の一様乱数
 
 	// 画像を格納するオブジェクトを宣言する
 	cv::Mat frame;
-
+	string now_movie = "test1";
+	bool ojigi_flag = false;
 	for (;;) {
+		cout << now_movie << endl;
 		//std::cout << "kusa" << std::endl;
 		// 1フレームを取り込む
-		cap2 >> frame;				// cap から frame へ
+		cap2[now_movie] >> frame;				// cap から frame へ
 
 		// 画像から空のとき、無限ループを抜ける
 		if (frame.empty() == true) {
@@ -236,18 +255,29 @@ int movie(){
 		}
 
 		// ウィンドウに画像を表示する
-		cv::imshow("再生中", frame);
+		
 		cash_disp->update(frame);
+		cv::imshow("別スレッド 本スレッドで重いことしても止まらない でもこっちでエンターとかしてもロボは動かない", display_image);
 		// 33ms待つ
 		// キー入力されたらkeyへ文字コードを代入する
-		int key = cv::waitKey(50);
+		int key = cv::waitKey(16);
 
 		// 現在のフレーム番号（先頭から何フレーム目か）を表示する
-		int n = (int)cap2.get(CV_CAP_PROP_POS_FRAMES);	// フレームの位置を取得
-		int m = (int)cap2.get(CV_CAP_PROP_FRAME_COUNT);	// 全フレーム数を取得
-		if (n == m){
+		int n = (int)cap2[now_movie].get(CV_CAP_PROP_POS_FRAMES);	// フレームの位置を取得
+		int m = (int)cap2[now_movie].get(CV_CAP_PROP_FRAME_COUNT);	// 全フレーム数を取得
+		std::cout << n << "/" << m << std::endl;
+		
+		if (ojigi_flag){
+			now_movie = "ojigi";
+			cap2["ojigi"].set(CV_CAP_PROP_POS_FRAMES, 0);
+			ojigi_flag = false;
+		}	else if(n == m){
 			//cap2.open("uso.mp4");
-			cap2.set(CV_CAP_PROP_POS_FRAMES,0);
+			
+			now_movie = "test" + to_string(rand3(mt));
+			cap2[now_movie].set(CV_CAP_PROP_POS_FRAMES, 0);
+			
+			
 		}
 		//printf("フレーム %4d/%d\r", n, m);
 
@@ -258,16 +288,19 @@ int movie(){
 		}
 		else if (key == 'r') {	// Rキーが押されたら先頭から再生しなおす
 			//printf("\n巻き戻し\n");
-			cap2.set(CV_CAP_PROP_POS_FRAMES, 0);  // フレームの位置を0に設定
+			cap2[now_movie].set(CV_CAP_PROP_POS_FRAMES, 0);  // フレームの位置を0に設定
 
 		}
 		else if (key == 's') {	// Sキーが押されたら30フレームスキップする
 			//printf("\nスキップ\n");
-			cap2.set(CV_CAP_PROP_POS_FRAMES, n + 30);	// n+30に設定
+			cap2[now_movie].set(CV_CAP_PROP_POS_FRAMES, n + 30);	// n+30に設定
 
 		}
 		else if (key == 0x1b) {	// ESCキーが押されたら終了する
 			break;
+		}
+		else if (key == 'o'){
+			ojigi_flag = true;
 		}
 	}
 
@@ -2477,62 +2510,62 @@ void return_change(map<long long int, long long int> coin){
 
 	for (int i = 1; i <= coin[1]; i++){
 		m_home();
-		m_move_position_2(162, 148, 268.2 + (thickness[1] * (5 - (double)i)), 0, 180);
+		m_move_position_2(162, 148, 288.2 + (thickness[1] * (5 - (double)i)), 0, 180);
 		m_move_straight(162, 148, 248.6 + (thickness[1] * (5 - (double)i)), 0, 180);
 		wait_done();
 		m_grip();
-		m_move_position_2(162, 148, 268.2 + (thickness[1] * (5 - (double)i)), 0, 180);
+		m_move_position_2(162, 148, 288.2 + (thickness[1] * (5 - (double)i)), 0, 180);
 		m_move_position_2(400, 0, 270, 0, 180);
 		ungrip();
 	}
 	for (int i = 1; i <= coin[5]; i++){
 		m_home();
-		m_move_position_2(162, 208, 268.2 + (thickness[5] * (1 - (double)i)), 0, 180);
+		m_move_position_2(162, 208, 288.2 + (thickness[5] * (1 - (double)i)), 0, 180);
 		m_move_straight(162, 208, 248.6 + (thickness[5] * (1 - (double)i)), 0, 180);
 		wait_done();
 		m_grip();
-		m_move_position_2(162, 208, 268.2 + (thickness[5] * (1 - (double)i)), 0, 180);
+		m_move_position_2(162, 208, 288.2 + (thickness[5] * (1 - (double)i)), 0, 180);
 		m_move_position_2(400, 0, 270, 0, 180);
 		ungrip();
 	}
 	for (int i = 1; i <= coin[10]; i++){
 		m_home();
-		m_move_position_2(222, 148, 268.2 + (thickness[10] * (5 - (double)i)), 0, 180);
+		m_move_position_2(222, 148, 288.2 + (thickness[10] * (5 - (double)i)), 0, 180);
 		m_move_straight(222, 148, 248.6 + (thickness[10] * (5 - (double)i)), 0, 180);
 		wait_done();
 		m_grip();
-		m_move_position_2(222, 148, 268.2 + (thickness[10] * (5 - (double)i)), 0, 180);
+		m_move_position_2(222, 148, 288.2 + (thickness[10] * (5 - (double)i)), 0, 180);
 		m_move_position_2(400, 0, 270, 0, 180);
 		ungrip();
 	}
 	for (int i = 1; i <= coin[50]; i++){
 		m_home();
-		m_move_position_2(222, 208, 268.2 + (thickness[50] * (1 - (double)i)), 0, 180);
+		m_move_position_2(222, 208, 288.2 + (thickness[50] * (1 - (double)i)), 0, 180);
 		m_move_straight(222, 208, 248.6 + (thickness[50] * (1 - (double)i)), 0, 180);
 		wait_done();
 		m_grip();
-		m_move_position_2(222, 208, 268.2 + (thickness[50] * (1 - (double)i)), 0, 180);
+		m_move_position_2(222, 208, 288.2 + (thickness[50] * (1 - (double)i)), 0, 180);
 		m_move_position_2(400, 0, 270, 0, 180);
 		ungrip();
 	}
 	for (int i = 1; i <= coin[100]; i++){
 		m_home();
-		m_move_position_2(282, 148, 268.2 + (thickness[100] * (5 - (double)i)), 0, 180);
+		m_move_position_2(282, 148, 288.2 + (thickness[100] * (5 - (double)i)), 0, 180);
 		m_move_straight(282, 148, 248.2 + (thickness[100] * (5 - (double)i)), 0, 180);
 		wait_done();
 		m_grip();
-		m_move_position_2(282, 148, 268.2 + (thickness[100] * (5 - (double)i)), 0, 180);
+		m_move_position_2(282, 148, 288.2 + (thickness[100] * (5 - (double)i)), 0, 180);
 		m_move_position_2(400, 0, 270, 0, 180);
 		ungrip();
 
 	}
 	for (int i = 1; i <= coin[500]; i++){
 		m_home();
-		m_move_position_2(282, 208, 268.2 + (thickness[500] * (1 - (double)i)), 0, 180);
+		m_move_position_2(282, 208, 288.2 + (thickness[500] * (1 - (double)i)), 0, 180);
 		m_move_straight(282, 208, 248.2 + (thickness[500] * (1 - (double)i)), 0, 180);
 		wait_done();
 		m_grip();
-		m_move_position_2(282, 208, 268.2 + (thickness[500] * (1 - (double)i)), 0, 180);
+		m_move_position_2(282, 208, 288.2 + (thickness[500] * (1 - (double)i)), 0, 180);
 		m_move_position_2(400, 0, 270, 0, 180);
 		ungrip();
 	}
