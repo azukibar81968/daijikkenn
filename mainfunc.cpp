@@ -253,7 +253,10 @@ int flag_num = 2*10;
 std::vector<bool> internal_flags(flag_num, false);
 
 void method0(){
-	
+	ojigi_flag = true;
+	Sleep(10000);
+	kochira_flag = true;
+	Sleep(10000);
 	master_action_1();
 	to_receive_coin_flag = true;
 }
@@ -261,6 +264,8 @@ void method1(){
 	to_receive_coin_flag = false;
 test:;
 	master_action_2();
+
+	//以下商品価格，受け取り金額がやばかったとき用このしたを全部コメントアウトできたらいいな
 	question_flag = 1;
 
 	kochira_flag = true;
@@ -371,11 +376,12 @@ void mainfunc(HDC *hDC) {
 	//cv::VideoCapture cap2;
 	//cap2.open("uso.mp4");
 	std::map<string, cv::VideoCapture> cap2;
-	cap2["ojigi"];
+	//cap2["ojigi"];
+	cap2["ojigi2"];
 	cap2["test1"];
 	cap2["test2"];
 	cap2["test3"];
-	cap2["kochira"];
+	//cap2["kochira"];
 	cap2["kochira2"];
 	for (auto &x : cap2){
 		//動画を開く
@@ -420,8 +426,8 @@ void mainfunc(HDC *hDC) {
 		//std::cout << now_movie <<" " << n << "/" << m << std::endl;
 
 		if (ojigi_flag){
-			now_movie = "ojigi";
-			cap2["ojigi"].set(CV_CAP_PROP_POS_FRAMES, 0);
+			now_movie = "ojigi2";
+			cap2["ojigi2"].set(CV_CAP_PROP_POS_FRAMES, 0);
 			ojigi_flag = false;
 		}
 		else if (kochira_flag){
